@@ -1,0 +1,14 @@
+{
+  "_provenance": "CONSTRUCTED FROM OFFICIAL DOCS AS RECALLED - NOT RECORDED FROM A LIVE SANDBOX. Not sandbox-verified.",
+  "http": 200,
+  "body": {
+    "data": {
+      "code": 100,
+      "message": "Success",
+      "authority": "A00000000000000000000000000000000001",
+      "fee_type": "Merchant",
+      "fee": 100
+    },
+    "errors": []
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_provenance": "CONSTRUCTED FROM OFFICIAL DOCS AS RECALLED - NOT RECORDED FROM A LIVE SANDBOX. Not sandbox-verified.",
+  "http": 200,
+  "body": {
+    "data": {
+      "code": 101,
+      "message": "Verified",
+      "card_pan": "502229******5995",
+      "ref_id": 201,
+      "fee_type": "Merchant",
+      "fee": 0
+    },
+    "errors": []
+  }
+}
