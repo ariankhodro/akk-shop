@@ -37,6 +37,5 @@ export const connectDB = async () => {
   }
 
   const connection = await connectionPromise;
-  console.log(`MongoDB connected: ${connection.connection.host}`);
   return connection.connection;
 };

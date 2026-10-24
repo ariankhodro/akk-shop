@@ -1,3 +1,4 @@
+import { recordAuditEvent } from "../lib/audit-log.js";
 import NewsletterSubscriber, { effectiveNewsletterStatus } from "../models/newsletter-subscriber.model.js";
 import {
   CONFIRMATION_TTL_MS,
@@ -240,7 +241,7 @@ export const unsubscribeFromNewsletter = async (req, res) => {
   }
 };
 
-export const getNewsletterSubscribers = async (_req, res) => {
+export const getNewsletterSubscribers = async (req, res) => {
   try {
     const [subscribers, totals] = await Promise.all([
       NewsletterSubscriber.find({})
@@ -256,6 +257,10 @@ export const getNewsletterSubscribers = async (_req, res) => {
         { $group: { _id: "$effectiveStatus", count: { $sum: 1 } } },
       ]),
     ]);
+    await recordAuditEvent(req, {
+      action: "newsletter.listed", targetType: "newsletter", targetId: "",
+      summary: "Newsletter subscriber list viewed", metadata: { returned: subscribers.length, containsPersonalData: true },
+    });
     const counts = Object.fromEntries(totals.map((entry) => [entry._id, entry.count]));
     const summary = {
       total: totals.reduce((sum, entry) => sum + entry.count, 0),
