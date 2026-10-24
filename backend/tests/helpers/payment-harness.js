@@ -2,6 +2,7 @@
 // Importing this file registers connect/cleanup hooks for the importing test file.
 import { after, afterEach, before } from "node:test";
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import mongoose from "mongoose";
 import Coupon, { CouponRedemption, CouponUserUsage } from "../../models/coupon.model.js";
 import Order, { CheckoutGuard } from "../../models/order.model.js";
@@ -36,7 +37,11 @@ export const useDatabase = ({ clearAll = false } = {}) => {
     if (!testUri) return;
     setPaymentEnv();
     originalFetch = zarinpalDeps.fetch;
-    await mongoose.connect(testUri);
+    // node --test runs files in parallel processes: give each file its own disposable
+    // database (the base name was already checked to contain "test") so the global
+    // reconciler runs and lease lock of one file never see another file's orders.
+    const suffix = basename(process.argv[1] || String(process.pid)).replace(/[^A-Za-z0-9]+/g, "_").slice(-24);
+    await mongoose.connect(testUri, { dbName: `${dbName}_${suffix}`.slice(0, 63) });
     // Make sure unique/partial indexes exist before concurrency tests rely on them.
     await Promise.all([Order, Coupon, CouponRedemption, CouponUserUsage, ServiceCase, CheckoutGuard, Product, User].map((model) => model.init()));
   });
@@ -60,6 +65,7 @@ export const useDatabase = ({ clearAll = false } = {}) => {
     for (const key of Object.keys(created)) created[key] = [];
   });
   after(async () => {
+    if (mongoose.connection.readyState === 1) await mongoose.connection.dropDatabase().catch(() => {});
     if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
   });
 };

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Order from "../models/order.model.js";
-import ServiceCase from "../models/service-case.model.js";
+import ServiceCase, { sumCommittedRefunds } from "../models/service-case.model.js";
 
 const clampPage = (value) => {
   const parsed = Number.parseInt(value, 10);
@@ -44,14 +44,22 @@ export const createServiceCase = async (req, res) => {
       const existing = await ServiceCase.findOne({ order: order._id, type, status: { $nin: ["rejected", "resolved"] } });
       if (existing) return res.status(409).json({ message: "An active request already exists for this order" });
     }
+    // The request is for what is still refundable, never the full total twice (BIZ-8).
+    let refundAmount = 0;
+    if (type === "refund") {
+      refundAmount = order.totalAmount - await sumCommittedRefunds(order._id);
+      if (refundAmount <= 0) return res.status(409).json({ message: "This order has already been fully refunded" });
+    }
     const serviceCase = await ServiceCase.create({
       user: req.user._id, order: order?._id || null, type, subject, message,
-      refundAmount: type === "refund" ? order.totalAmount : 0,
+      refundAmount,
       refundStatus: type === "refund" ? "requested" : "not_applicable",
       events: [{ status: "open", note: "Request submitted by customer", actor: req.user._id }],
     });
     return res.status(201).json({ serviceCase });
   } catch (error) {
+    // The partial unique index closes the find-then-create race above.
+    if (error?.code === 11000) return res.status(409).json({ message: "An active request already exists for this order" });
     console.error("Unable to create service case", { name: error?.name, message: error?.message });
     return res.status(500).json({ message: "Unable to submit your request" });
   }

@@ -265,3 +265,18 @@ test("finalization tolerates a deleted coupon and does not advance an admin-ship
   assert.equal(current.couponReservationStatus, "redeemed");
   assert.equal(current.shipmentStatus, "packed", "late finalization must not rewind shipment status");
 });
+
+test("zarinpalRefId is unique among non-empty values; a duplicate is recorded without it and flagged", opts, async () => {
+  const product = await createProduct({ stock: 9 });
+  const first = await createReservedOrder(product, { quantity: 1 });
+  const second = await createReservedOrder(product, { quantity: 1 });
+  mockProvider(() => fixtureResponse("verify-success-100")); // ref_id 201 for both
+  await callback(first);
+  const res = await callback(second);
+  assert.equal(pathOf(res), "/purchase-success", "the customer who paid is not punished");
+  const current = await Order.findById(second._id).lean();
+  assert.equal(current.paymentStatus, "paid");
+  assert.equal(current.zarinpalRefId, undefined);
+  assert.equal(current.needsManualReview, true);
+  assert.equal(current.manualReviewReason, "duplicate_provider_ref_id");
+});
