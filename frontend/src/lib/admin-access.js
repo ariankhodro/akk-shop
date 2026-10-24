@@ -8,7 +8,7 @@ export const TAB_PERMISSIONS = Object.freeze({
   categories: ["catalogue.manage"],
   orders: ["orders.manage"],
   "service-cases": ["support.manage", "refunds.manage"],
-  customers: ["customers.manage", "roles.manage"],
+  customers: ["customers.manage", "roles.manage", "wholesale.manage"],
   inventory: ["inventory.manage"],
   shipping: ["settings.manage"],
   campaigns: ["marketing.manage"],

@@ -120,6 +120,7 @@ const OrderManagement = () => {
                   <div className="text-left">
                     <p dir="ltr" className="text-lg font-bold text-[var(--ui-accent)]">{formatPrice(order.totalAmount)}</p>
                     <span className="mt-1 inline-flex rounded-full bg-[var(--ui-accent-soft)] px-3 py-1 text-xs text-[var(--ui-accent)]">{labels[draft.status] || "در انتظار آماده‌سازی"}</span>
+                    {order.pricingTier === "wholesale" && <span className="mr-1 mt-1 inline-flex rounded-full bg-[var(--ui-strong-surface)] px-3 py-1 text-xs font-semibold text-[var(--ui-inverse-text)]">سفارش عمده</span>}
                   </div>
                 </div>
                 <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
@@ -136,7 +137,7 @@ const OrderManagement = () => {
                     ) : <p className="rounded-xl border border-[var(--ui-warning-border)] bg-amber-950/20 p-3 text-sm text-[var(--ui-warning)]">این سفارش آدرس ذخیره‌شده ندارد؛ برای هماهنگی با مشتری تماس بگیرید.</p>}
                     <div className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-3">
                       <h3 className="mb-2 text-sm font-bold text-[var(--ui-text)]">اقلام سفارش</h3>
-                      {(order.products || []).map((item, index) => <p key={`${order._id}-${index}`} className="py-1 text-xs text-[var(--ui-muted)]">{item.productName || item.product?.name || "محصول"} × {new Intl.NumberFormat("fa-IR").format(item.quantity)}</p>)}
+                      {(order.products || []).map((item, index) => <p key={`${order._id}-${index}`} className="py-1 text-xs text-[var(--ui-muted)]">{item.productName || item.product?.name || "قطعه"}{[item.size, item.color].filter(Boolean).length ? " (" + [item.size, item.color].filter(Boolean).join(" / ") + ")" : ""} × {new Intl.NumberFormat("fa-IR").format(item.quantity)}{item.sku && <span dir="ltr" className="mr-2 font-mono text-[11px]">{item.sku}</span>}{item.price !== undefined && <span className="mr-2">· <span dir="ltr">{formatPrice(item.price)}</span>{item.retailPrice && item.retailPrice !== item.price ? <span className="mr-1 line-through opacity-70" dir="ltr">{formatPrice(item.retailPrice)}</span> : null}</span>}</p>)}
                     </div>
                   </section>
 

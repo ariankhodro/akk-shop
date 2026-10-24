@@ -4,16 +4,10 @@ import { useProductStore } from "../stores/useProductStore";
 import { useCategoryStore } from "../stores/useCategoryStore";
 import { formatPrice, getCurrencyLabel, STORE_CURRENCY } from "../lib/commerce";
 import { useDialog } from "../lib/use-dialog";
+import PartFieldsEditor from "./admin/PartFieldsEditor";
+import { partFieldsError, partFieldsFromProduct, partFieldsPayload } from "../lib/admin-part-fields";
 
 const currencyLabel = getCurrencyLabel(STORE_CURRENCY);
-const fitOptions = [
-  ["true-to-size", "مطابق سایز استاندارد"],
-  ["slim", "جذب"],
-  ["regular", "معمولی"],
-  ["relaxed", "آزاد"],
-  ["oversized", "آزاد و اورسایز"],
-  ["athletic", "ورزشی"],
-];
 const fallbackCategory = (slug) => ({
   _id: "legacy:" + slug,
   slug,
@@ -40,24 +34,19 @@ const parseColors = (value) => {
   const found = String(value || "").split(/[,\n،]+/).map((part) => part.trim()).filter(Boolean).map((entry) => {
     const separator = entry.lastIndexOf(":");
     const name = (separator >= 0 ? entry.slice(0, separator) : entry).trim();
-    const hex = separator >= 0 ? entry.slice(separator + 1).trim() : "#d5d0c5";
-    return { name, hex: /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#d5d0c5" };
+    const hex = separator >= 0 ? entry.slice(separator + 1).trim() : "#d2d6dc";
+    return { name, hex: /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#d2d6dc" };
   });
   return found.filter((color, index) => color.name && found.findIndex((item) => item.name.toLowerCase() === color.name.toLowerCase()) === index).slice(0, 16);
 };
 const variantKey = (size, color) => JSON.stringify([size, color]);
-const parseSizeChart = (value) => String(value || "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
-  const [size, chest, waist, hips, length] = line.split(/[,،]+/).map((part) => part.trim());
-  const measurement = (entry) => entry === undefined || entry === "" ? null : Number(entry);
-  return { size, chestCm: measurement(chest), waistCm: measurement(waist), hipsCm: measurement(hips), lengthCm: measurement(length) };
-}).filter((row) => row.size);
 const makeInitialForm = (product) => {
   const sizes = Array.isArray(product.sizes) && product.sizes.length
     ? product.sizes
     : [...new Set((product.variants || []).map((variant) => variant.size).filter(Boolean))];
   const colors = Array.isArray(product.colors) && product.colors.length
     ? product.colors
-    : [...new Map((product.variants || []).filter((variant) => variant.color).map((variant) => [variant.color, { name: variant.color, hex: "#d5d0c5" }])).values()];
+    : [...new Map((product.variants || []).filter((variant) => variant.color).map((variant) => [variant.color, { name: variant.color, hex: "#d2d6dc" }])).values()];
   const images = Array.isArray(product.images) && product.images.length ? product.images : (product.image ? [product.image] : []);
   return {
     name: product.name || "",
@@ -68,14 +57,7 @@ const makeInitialForm = (product) => {
     categoryId: product.categoryId ? String(product.categoryId) : "",
     images,
     sizesText: sizes.join(", "),
-    colorsText: colors.map((color) => color.name + ": " + (color.hex || "#d5d0c5")).join(", "),
-    fitType: product.fit?.type || "regular",
-    fitDescription: product.fit?.description || "",
-    modelHeight: product.fit?.modelHeight || "",
-    modelSize: product.fit?.modelSize || "",
-    sizeChartText: (product.sizeChart || []).map((row) => [
-      row.size, row.chestCm ?? "", row.waistCm ?? "", row.hipsCm ?? "", row.lengthCm ?? "",
-    ].join(", ")).join("\n"),
+    colorsText: colors.map((color) => color.name + ": " + (color.hex || "#d2d6dc")).join(", "),
   };
 };
 
@@ -89,6 +71,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
     const value = product.attributes || {};
     return value instanceof Map ? Object.fromEntries(value) : { ...value };
   });
+  const [partFields, setPartFields] = useState(() => partFieldsFromProduct(product));
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
@@ -136,14 +119,14 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
   const combinations = useMemo(() => {
     if (!sizes.length && !colors.length) return [];
     const sizeOptions = sizes.length ? sizes : [""];
-    const colorOptions = colors.length ? colors : [{ name: "", hex: "#d5d0c5" }];
+    const colorOptions = colors.length ? colors : [{ name: "", hex: "#d2d6dc" }];
     return sizeOptions.flatMap((size) => colorOptions.map((color) => ({
       size, color: color.name, hex: color.hex, key: variantKey(size, color.name),
     })));
   }, [sizes, colors]);
 
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
-  const fieldClass = "mt-1 block w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 py-2.5 text-sm text-[var(--ui-text)] outline-none transition focus:border-[var(--ui-focus)] focus:ring-2 focus:ring-[#d6b779]/20";
+  const fieldClass = "mt-1 block w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 py-2.5 text-sm text-[var(--ui-text)] outline-none transition focus:border-[var(--ui-focus)] focus:ring-2 focus:ring-[#fb923c]/20";
   const labelClass = "block text-sm font-medium text-[var(--ui-muted)]";
 
   const handleImageChange = async (event) => {
@@ -191,9 +174,9 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
       setFormError("موجودی هر ترکیب باید عدد صحیح و نامنفی باشد.");
       return;
     }
-    const sizeChart = parseSizeChart(form.sizeChartText);
-    if (sizeChart.some((row) => [row.chestCm, row.waistCm, row.hipsCm, row.lengthCm].some((value) => value !== null && (!Number.isFinite(value) || value < 0)))) {
-      setFormError("اندازه‌های جدول سایز باید عددی نامنفی باشند.");
+    const partError = partFieldsError(partFields, form.price);
+    if (partError) {
+      setFormError(partError);
       return;
     }
     if (!selectedCategory?.slug && !form.category.trim()) {
@@ -223,8 +206,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
           size: variant.size, color: variant.color, stock: Number(variantStocks[variant.key] ?? 0),
           stockBaseline: (product.variants || []).find((stored) => (stored.size || "") === (variant.size || "") && (stored.color || "") === (variant.color || ""))?.stock ?? null,
         })),
-        fit: { type: form.fitType, description: form.fitDescription, modelHeight: form.modelHeight, modelSize: form.modelSize },
-        sizeChart,
+        ...partFieldsPayload(partFields),
       });
       onSaved();
     } catch {
@@ -239,7 +221,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
       <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="product-edit-title" dir="rtl" className="mx-auto my-4 max-w-5xl rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 text-[var(--ui-text)] shadow-2xl sm:my-8 sm:p-7">
         <div className="mb-5 flex items-start justify-between gap-3 border-b border-[var(--ui-border)] pb-4">
           <div>
-            <h2 id="product-edit-title" className="text-xl font-bold text-[var(--ui-accent)] sm:text-2xl">ویرایش محصول</h2>
+            <h2 id="product-edit-title" className="text-xl font-bold text-[var(--ui-accent)] sm:text-2xl">ویرایش قطعه</h2>
             <p className="mt-1 text-sm leading-6 text-[var(--ui-muted)]">تغییرات پس از ذخیره در صفحه عمومی محصول نمایش داده می‌شود. محصول می‌تواند جداگانه بایگانی یا بازیابی شود.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="بستن پنجره ویرایش" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border)] text-[var(--ui-muted)] hover:bg-[var(--ui-hover)]"><X size={18} aria-hidden="true" /></button>
@@ -249,21 +231,21 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
             <div className="min-w-0 space-y-6">
               <section className="space-y-4">
                 <h3 className="border-b border-[var(--ui-border)] pb-2 text-sm font-bold">اطلاعات پایه</h3>
-                <label className={labelClass}>نام محصول
+                <label className={labelClass}>نام قطعه
                   <input value={form.name} onChange={(event) => updateField("name", event.target.value)} required maxLength={160} className={fieldClass} />
                 </label>
                 <label className={labelClass}>توضیحات
                   <textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} required maxLength={5000} rows={4} className={fieldClass} />
                 </label>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className={labelClass}>قیمت ({currencyLabel})
+                  <label className={labelClass}>قیمت خرده‌فروشی ({currencyLabel})
                     <input type="number" min="0" step="1" value={form.price} onChange={(event) => updateField("price", event.target.value)} required className={fieldClass} />
                   </label>
                   {combinations.length === 0 ? (
                     <label className={labelClass}>موجودی انبار
                       <input type="number" min="0" step="1" value={form.stock} onChange={(event) => updateField("stock", event.target.value)} className={fieldClass} />
                     </label>
-                  ) : <p className="self-end rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-3 text-xs leading-5 text-[var(--ui-muted)]">موجودی هر ترکیب در بخش سایز و رنگ تنظیم می‌شود.</p>}
+                  ) : <p className="self-end rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-3 text-xs leading-5 text-[var(--ui-muted)]">موجودی هر گزینه در بخش گزینه‌ها تنظیم می‌شود.</p>}
                 </div>
                 <label className={labelClass}>دسته‌بندی
                   <select value={selectedCategory ? (selectedCategory.isLegacyFallback ? "legacy:" + selectedCategory.slug : String(selectedCategory._id)) : form.categoryId} onChange={(event) => {
@@ -276,6 +258,8 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
                   </select>
                 </label>
               </section>
+
+              <PartFieldsEditor value={partFields} onChange={setPartFields} retailPrice={form.price} fieldClass={fieldClass} labelClass={labelClass} idPrefix={"edit-part-" + product._id} />
 
               {attributeDefinitions.length > 0 && (
                 <section className="space-y-4 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-4">
@@ -318,7 +302,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
                   {form.images.map((image, index) => (
                     <div key={image} className="relative overflow-hidden rounded-xl border border-[var(--ui-border)]">
-                      <img src={image} alt={"پیش‌نمایش تصویر " + (index + 1)} className="aspect-[4/5] w-full object-cover" />
+                      <img src={image} alt={"پیش‌نمایش تصویر " + (index + 1)} className="aspect-square w-full object-cover" />
                       {index === 0 && <span className="absolute bottom-2 right-2 rounded-full bg-black/75 px-2 py-1 text-[10px]">تصویر اصلی</span>}
                       <button type="button" onClick={() => updateField("images", form.images.filter((_, imageIndex) => index !== imageIndex))} aria-label={"حذف تصویر " + (index + 1)} className="absolute left-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/75 text-[var(--ui-text)]"><X size={14} aria-hidden="true" /></button>
                     </div>
@@ -328,48 +312,30 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
               </section>
 
               <section className="space-y-4">
-                <h3 className="border-b border-[var(--ui-border)] pb-2 text-sm font-bold">سایز، رنگ و موجودی ترکیب‌ها</h3>
-                <label className={labelClass}>سایزها
-                  <input value={form.sizesText} onChange={(event) => updateField("sizesText", event.target.value)} placeholder="XS, S, M, L, XL" className={fieldClass} />
+                <h3 className="border-b border-[var(--ui-border)] pb-2 text-sm font-bold">گزینه‌ها و موجودی هر گزینه (اختیاری)</h3>
+                <label className={labelClass}>نوع / موقعیت
+                  <input value={form.sizesText} onChange={(event) => updateField("sizesText", event.target.value)} placeholder="چپ, راست" className={fieldClass} />
                 </label>
-                <label className={labelClass}>رنگ‌ها (نام: کد رنگ)
-                  <input value={form.colorsText} onChange={(event) => updateField("colorsText", event.target.value)} placeholder="مشکی: #222222, سفید: #f7f7f4" className={fieldClass} />
+                <label className={labelClass}>رنگ (نام: کد رنگ)
+                  <input value={form.colorsText} onChange={(event) => updateField("colorsText", event.target.value)} placeholder="مشکی: #222222, نقره‌ای: #c0c0c0" className={fieldClass} />
                 </label>
                 {combinations.length > 0 && (
                   <div className="overflow-hidden rounded-xl border border-[var(--ui-border)]">
                     <div className="bg-[var(--ui-surface-raised)]/60 px-3 py-3 text-sm font-semibold">موجودی ترکیب‌ها · {combinations.length} گزینه</div>
                     {combinations.map((variant) => (
                       <label key={variant.key} className="flex items-center justify-between gap-3 border-t border-[var(--ui-border)] px-3 py-3 text-sm text-[var(--ui-text)]">
-                        <span className="flex min-w-0 items-center gap-2">{variant.color && <span className="h-4 w-4 shrink-0 rounded-full border border-white/20" style={{ backgroundColor: variant.hex }} />} {[variant.size && "سایز " + variant.size, variant.color].filter(Boolean).join(" / ") || "پیش‌فرض"}</span>
+                        <span className="flex min-w-0 items-center gap-2">{variant.color && <span className="h-4 w-4 shrink-0 rounded-full border border-white/20" style={{ backgroundColor: variant.hex }} />} {[variant.size, variant.color].filter(Boolean).join(" / ") || "پیش‌فرض"}</span>
                         <input type="number" min="0" step="1" required value={variantStocks[variant.key] ?? "0"} onChange={(event) => setVariantStocks((current) => ({ ...current, [variant.key]: event.target.value }))} className="w-24 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-2 py-2 text-sm text-[var(--ui-text)]" aria-label={"موجودی " + [variant.size, variant.color].filter(Boolean).join(" / ")} />
                       </label>
                     ))}
-                    <p className="bg-[var(--ui-surface-raised)] px-3 py-3 text-xs text-[var(--ui-muted)]">هر ترکیب سایز و رنگ باید موجودی مستقل داشته باشد.</p>
+                    <p className="bg-[var(--ui-surface-raised)] px-3 py-3 text-xs text-[var(--ui-muted)]">هر گزینه باید موجودی مستقل داشته باشد.</p>
                   </div>
                 )}
               </section>
 
-              <section className="space-y-4">
-                <h3 className="border-b border-[var(--ui-border)] pb-2 text-sm font-bold">راهنمای تن‌خور و اندازه‌گیری</h3>
-                <label className={labelClass}>نوع تن‌خور
-                  <select value={form.fitType} onChange={(event) => updateField("fitType", event.target.value)} className={fieldClass}>
-                    {fitOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </label>
-                <label className={labelClass}>توضیح تن‌خور
-                  <textarea value={form.fitDescription} onChange={(event) => updateField("fitDescription", event.target.value)} rows={2} maxLength={500} className={fieldClass} />
-                </label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className={labelClass}>قد مدل<input value={form.modelHeight} onChange={(event) => updateField("modelHeight", event.target.value)} maxLength={40} className={fieldClass} /></label>
-                  <label className={labelClass}>سایز مدل<input value={form.modelSize} onChange={(event) => updateField("modelSize", event.target.value)} maxLength={24} className={fieldClass} /></label>
-                </div>
-                <label className={labelClass}>جدول اندازه‌گیری · هر خط: سایز، دور سینه، دور کمر، دور باسن، قد لباس (سانتی‌متر)
-                  <textarea value={form.sizeChartText} onChange={(event) => updateField("sizeChartText", event.target.value)} rows={4} placeholder={"S, 92, 76, 96, 65\nM, 98, 82, 102, 68"} className={fieldClass} />
-                </label>
-              </section>
               {formError && <p role="alert" className="rounded-xl border border-[var(--ui-danger-border)]/50 bg-[var(--ui-danger-bg)] p-3 text-sm leading-6 text-[var(--ui-danger)]">{formError}</p>}
               <div className="flex flex-wrap gap-2 border-t border-[var(--ui-border)] pt-4">
-                <button type="submit" disabled={saving || imageBusy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#d6b779] px-5 py-2.5 text-sm font-bold text-[#171a20] hover:bg-[#e4c989] disabled:opacity-50">
+                <button type="submit" disabled={saving || imageBusy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--ui-accent)] px-5 py-2.5 text-sm font-bold text-[var(--ui-button-text)] hover:bg-[var(--ui-accent-hover)] disabled:opacity-50">
                   {saving ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Save size={17} aria-hidden="true" />}
                   {saving ? "در حال ذخیره…" : "ذخیره تغییرات"}
                 </button>
@@ -378,15 +344,18 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
             </div>
 
             <aside className="h-fit rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-4">
-              <h3 className="text-sm font-bold text-[var(--ui-text)]">پیش‌نمایش محصول</h3>
+              <h3 className="text-sm font-bold text-[var(--ui-text)]">پیش‌نمایش قطعه</h3>
               <div className="mt-3 overflow-hidden rounded-xl bg-[var(--ui-surface)]">
-                {form.images[0] ? <img src={form.images[0]} alt="تصویر اصلی پیش‌نمایش" className="aspect-[4/5] w-full object-cover" /> : <div className="flex aspect-[4/5] items-center justify-center text-sm text-[var(--ui-muted)]">بدون تصویر</div>}
+                {form.images[0] ? <img src={form.images[0]} alt="تصویر اصلی پیش‌نمایش" className="aspect-square w-full object-contain" /> : <div className="flex aspect-square items-center justify-center text-sm text-[var(--ui-muted)]">بدون تصویر</div>}
                 <div className="space-y-2 p-3">
-                  <p className="font-semibold text-[var(--ui-text)]">{form.name || "نام محصول"}</p>
+                  <p className="font-semibold text-[var(--ui-text)]">{form.name || "نام قطعه"}</p>
+                  {partFields.sku && <p dir="ltr" className="text-left text-xs text-[var(--ui-muted)]">{partFields.sku}</p>}
                   <p className="line-clamp-4 text-xs leading-5 text-[var(--ui-muted)]">{form.description || "توضیحات محصول در این بخش نمایش داده می‌شود."}</p>
                   <p className="text-lg font-bold text-[var(--ui-accent)]">{formatPrice(Number(form.price) || 0, STORE_CURRENCY)}</p>
+                  {partFields.wholesalePrice !== "" && <p className="text-xs text-[var(--ui-muted)]">عمده: {formatPrice(Number(partFields.wholesalePrice) || 0, STORE_CURRENCY)} · از {new Intl.NumberFormat("fa-IR").format(Number(partFields.wholesaleMinQuantity) || 1)} عدد</p>}
                   <p className="text-xs text-[var(--ui-muted)]">{selectedCategory?.name?.fa || form.category || "بدون دسته‌بندی"}</p>
-                  {combinations.length > 0 && <p className="text-xs text-[var(--ui-muted)]">{combinations.length} ترکیب سایز و رنگ</p>}
+                  {combinations.length > 0 && <p className="text-xs text-[var(--ui-muted)]">{combinations.length} گزینه</p>}
+                  {partFields.fitments.length > 0 && <p className="text-xs text-[var(--ui-muted)]">سازگار با {new Intl.NumberFormat("fa-IR").format(partFields.fitments.length)} خودرو</p>}
                   <a href={"/product/" + product._id} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-[var(--ui-accent)] underline underline-offset-4">
                     بازکردن صفحه عمومی <ExternalLink size={13} aria-hidden="true" />
                   </a>
