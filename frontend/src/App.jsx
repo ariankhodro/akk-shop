@@ -54,15 +54,18 @@ function App() {
   const { user, checkAuth, checkingAuth } = useUserStore();
   const { setAuthenticated, initializeGuestCart, mergeGuestCart } = useCartStore();
 
+  // Keyed on the user's id: profile edits replace the object but must not re-merge the cart.
+  const userId = user ? user._id ?? "authenticated" : null;
+
   useEffect(() => { checkAuth(); }, [checkAuth]);
   useEffect(() => {
-    setAuthenticated(Boolean(user));
-    if (!user) {
+    setAuthenticated(Boolean(userId));
+    if (!userId) {
       initializeGuestCart();
       return;
     }
     mergeGuestCart();
-  }, [user, setAuthenticated, initializeGuestCart, mergeGuestCart]);
+  }, [userId, setAuthenticated, initializeGuestCart, mergeGuestCart]);
 
   if (checkingAuth) return <LoadingSpinner />;
 
