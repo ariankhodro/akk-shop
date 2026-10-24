@@ -82,6 +82,12 @@ jobs:
           npm run build --prefix backend
           for file in api/*.js seo/server-utils.js frontend/src/lib/seo-utils.js; do node --check "$file"; done
 
+      - name: End-to-end journeys (real backend, built SPA, Chromium; Zarinpal mocked)
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
+          MONGO_E2E_URI='mongodb://127.0.0.1:27017/shop_e2e_test?replicaSet=rs0' REDIS_E2E_URL=redis://127.0.0.1:6379/3 node e2e/run.mjs
+
       - name: Stop test database
         if: always()
         run: docker rm -f mongo-test || true
