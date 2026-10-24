@@ -96,7 +96,7 @@ function createRequest(path, query = {}, method = "GET") {
 function mockedFetch(apiResponder) {
   return async (input) => {
     const url = new URL(typeof input === "string" ? input : input.url);
-    if (url.origin === PREVIEW_ORIGIN && url.pathname === "/index.html") {
+    if (url.origin === SHOP_ORIGIN && url.pathname === "/index.html") {
       return new Response(SHELL, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8" },

@@ -18,6 +18,7 @@ import {
   resolveApiBase,
   sendHtml,
 } from "../seo/server-utils.js";
+import { isSafeInternalHref } from "../seo/internal-href.js";
 
 const MINIMAL_SHELL = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>تیک بوتیک</title></head><body><div id="root"></div></body></html>';
 
@@ -231,9 +232,7 @@ const renderCampaignContent = (campaign, origin) => {
   const imageBlock = image
     ? '<div style="max-width:720px;margin:16px 0">' + imageHtml(campaign.image || "", campaign.title || "پیشنهاد ویژه", origin, 'width="1200" height="700"') + '</div>'
     : "";
-  const target = typeof campaign.href === "string" && campaign.href.startsWith("/") && !campaign.href.startsWith("//")
-    ? campaign.href
-    : "/shop";
+  const target = isSafeInternalHref(campaign.href) ? campaign.href : "/shop";
   const products = Array.isArray(campaign.productIds) ? campaign.productIds : [];
   return pageLayout(campaign.title || "پیشنهاد ویژه", campaign.description || "پیشنهادهای ویژه و محصولات منتخب تیک بوتیک.",
     imageBlock +
@@ -336,7 +335,13 @@ export default async function handler(req, res) {
   }
 
   const canonical = canonicalUrlForQuery(routePath, req.query, siteOrigin, siteOrigin);
-  const shellPromise = fetchAppShell(requestOrigin);
+  // Started now so it overlaps with the API calls, but it must never reject
+  // unhandled: failures are captured and surfaced when the shell is needed.
+  let shellError = null;
+  const shellPromise = fetchAppShell(requestOrigin).catch((error) => {
+    shellError = error;
+    return null;
+  });
   let shell;
   let apiBase;
   let title = "";
@@ -399,7 +404,7 @@ export default async function handler(req, res) {
         const raw = req.query?.[key];
         const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
         for (const value of values) {
-          if (typeof value === "string" && !/[\\r\\n]/.test(value)) categoryQuery.append(key, value.slice(0, 2400));
+          if (typeof value === "string" && !/[\r\n]/.test(value)) categoryQuery.append(key, value.slice(0, 2400));
         }
       }
       if (!categoryQuery.has("page")) categoryQuery.set("page", "1");
@@ -485,7 +490,7 @@ export default async function handler(req, res) {
             const raw = req.query?.[key];
             const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
             for (const value of values) {
-              if (typeof value === "string" && !/[\\r\\n]/.test(value)) shopQuery.append(key, value.slice(0, 160));
+              if (typeof value === "string" && !/[\r\n]/.test(value)) shopQuery.append(key, value.slice(0, 160));
             }
           }
           shopQuery.set("limit", "8");
@@ -507,6 +512,7 @@ export default async function handler(req, res) {
     }
 
     shell = await shellPromise;
+    if (!shell) throw shellError || new Error("Unable to load the storefront HTML shell");
     const filtered = (type === "category" || type === "collection") && hasIndexExcludedQuery(req.query);
     const missingCanonicalOrigin = !siteOrigin;
     const robots = filtered || missingCanonicalOrigin ? "noindex, follow" : "index, follow, max-image-preview:large";

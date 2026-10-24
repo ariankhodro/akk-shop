@@ -19,6 +19,8 @@ import orderRoutes from "./routes/order.route.js";
 import adminRoutes from "./routes/admin.route.js";
 import serviceCaseRoutes from "./routes/service-case.route.js";
 import { apiRateLimit } from "./middleware/rate-limit.middleware.js";
+import { createReadyHandler } from "./lib/ready-handler.js";
+import { globalJsonBody } from "./middleware/body-parsers.middleware.js";
 import { browserOriginAndCors, securityHeaders } from "./middleware/security.middleware.js";
 import { requestContext } from "./middleware/request-context.middleware.js";
 import { trustProxyHops } from "./lib/config.js";
@@ -53,24 +55,16 @@ app.use("/api", (req, res, next) => {
 app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
 
 // Readiness must actively establish/re-establish MongoDB connectivity instead
-// of trusting the state left by a previous serverless invocation.
-app.get("/api/ready", async (_req, res) => {
-  try {
-    await connectDB();
-  } catch (error) {
-    // Deliberately omit error.message and connection details from logs.
-    console.error("Database readiness check failed", safeErrorMetadata(error));
-  }
-
-  // Read the live MongoDB state after the asynchronous Redis probe. A connection
-  // that recovers during that probe must not produce "not_ready" with both
-  // dependencies reported as connected.
-  const readiness = await getReadinessStatus({
-    databaseReady: () => mongoose.connection.readyState === 1,
-    redisClient: redis,
-  });
-  return res.status(readiness.status === "ready" ? 200 : 503).json(readiness);
-});
+// of trusting the state left by a previous serverless invocation. Dependency
+// detail is only returned to callers presenting READINESS_TOKEN (SEC-11).
+app.get("/api/ready", createReadyHandler({
+  connectDB,
+  getReadinessStatus,
+  isDatabaseReady: () => mongoose.connection.readyState === 1,
+  redisClient: redis,
+  // Deliberately omit error.message and connection details from logs.
+  logError: (error) => console.error("Database readiness check failed", safeErrorMetadata(error)),
+}));
 
 // Some Vercel execution paths invoke the Express app directly rather than
 // through the API wrapper. Protect database-backed routes in either case.
@@ -86,18 +80,11 @@ app.use("/api", async (req, res, next) => {
   }
 });
 
-// Request bodies are parsed only after rate limiting and database availability checks.
-// Keep ordinary JSON payloads small. Only content-management endpoints that may
-// carry image data URLs receive the larger, still bounded 10 MB parser.
-const largeJsonRequest = (req) => {
-  const path = req.path;
-  if (req.method === "POST" && ["/products", "/categories", "/campaigns"].includes(path)) return true;
-  if ([ "PUT", "PATCH" ].includes(req.method) &&
-      [/^\/products\/[a-f\d]{24}$/i, /^\/categories\/[a-f\d]{24}$/i, /^\/campaigns\/[a-f\d]{24}$/i].some((pattern) => pattern.test(path))) return true;
-  return false;
-};
-app.use("/api", express.json({ limit: "10mb", type: largeJsonRequest }));
-app.use("/api", express.json({ limit: "1mb" }));
+// Request bodies are parsed only after rate limiting and database availability
+// checks. The global parser is deliberately small; content-management routes
+// that carry image data URLs mount the 10 MB parser themselves after
+// protectRoute/adminRoute (SEC-4), and the global parser skips those routes.
+app.use("/api", globalJsonBody);
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);

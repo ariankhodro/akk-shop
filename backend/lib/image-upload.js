@@ -195,3 +195,66 @@ export const resolveImageReference = async (
     throw new ImageStorageError();
   }
 };
+
+const MANAGED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+// Strict resolver for product galleries (SEC-3). Unlike resolveImageReference
+// it never accepts local paths or arbitrary third-party HTTPS hosts:
+//  - data:image/(jpeg|png|webp|gif) URLs are validated and uploaded;
+//  - https URLs must already be app-managed Cloudinary assets in `folder`, or
+//    exactly match a value in `existing` (the product's currently stored images);
+//  - everything else (http, ftp, s3, gs, file, local paths, SVG, ...) is rejected.
+// Returns { urls, uploaded } where `uploaded` lists the assets created by this
+// call so the caller can clean them up if persistence fails. Assets uploaded
+// earlier in the same call are removed here if a later entry is rejected.
+export const resolveManagedImageList = async (
+  values,
+  {
+    folder,
+    maxBytes = 5 * 1024 * 1024,
+    maxCount = 8,
+    existing = [],
+    cloudName = process.env.CLOUDINARY_CLOUD_NAME,
+    uploader = cloudinary.uploader,
+  } = {}
+) => {
+  if (values === undefined || values === null) return { urls: [], uploaded: [] };
+  if (!Array.isArray(values)) throw new ImageUploadError("فرمت تصاویر محصول معتبر نیست.");
+  const entries = values.map((value) => {
+    if (value === undefined || value === null || value === "") return "";
+    if (typeof value !== "string") throw new ImageUploadError("فرمت تصاویر محصول معتبر نیست.");
+    return value.trim();
+  }).filter(Boolean);
+  if (entries.length > maxCount) throw new ImageUploadError("حداکثر " + maxCount + " تصویر برای هر محصول مجاز است.");
+
+  const known = new Set((existing || []).filter((value) => typeof value === "string" && value));
+  const urls = [];
+  const uploaded = [];
+  try {
+    for (const entry of entries) {
+      let resolved;
+      if (entry.startsWith("data:")) {
+        resolved = await resolveImageReference(entry, { folder, maxBytes, uploader });
+        uploaded.push(resolved);
+      } else if (known.has(entry)) {
+        resolved = entry;
+      } else {
+        const extension = /\.([a-z0-9]+)$/i.exec(entry.split(/[?#]/)[0])?.[1]?.toLowerCase();
+        const managed = /^https:\/\//i.test(entry) && safeImageReference(entry) &&
+          (!extension || MANAGED_EXTENSIONS.has(extension)) &&
+          getManagedCloudinaryPublicId(entry, { cloudName, folder }) !== null;
+        if (!managed) {
+          throw new ImageUploadError("آدرس تصویر باید تصویر بارگذاری‌شده همین فروشگاه یا فایل JPG، PNG، WebP یا GIF باشد.");
+        }
+        resolved = entry;
+      }
+      if (!urls.includes(resolved)) urls.push(resolved);
+    }
+  } catch (error) {
+    await Promise.all(uploaded.map((url) =>
+      deleteManagedCloudinaryImage(url, { folder, cloudName, uploader }).catch(() => false)
+    ));
+    throw error;
+  }
+  return { urls, uploaded };
+};
