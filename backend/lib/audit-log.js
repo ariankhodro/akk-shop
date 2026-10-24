@@ -60,7 +60,9 @@ const headerValue = (req, name, maxLength) => {
   return String(req.get(name) || "").replace(/[\r\n]/g, "").slice(0, maxLength);
 };
 
-export const recordAuditEvent = async (req, event) => {
+// `strict` makes a failed audit write throw so security-critical changes can be
+// failed (or rolled back with `session`) instead of silently going unrecorded.
+export const recordAuditEvent = async (req, event, { session, strict = false } = {}) => {
   try {
     const metadataInput = isRecord(event.metadata) ? event.metadata : {};
     const metadata = { ...metadataInput };
@@ -77,7 +79,7 @@ export const recordAuditEvent = async (req, event) => {
       || headerValue(req, "x-vercel-id", 160)
       || String(req.id || "").slice(0, 160);
 
-    await AuditLog.create({
+    const document = {
       actor: req.user?._id || null,
       actorName: typeof req.user?.name === "string" ? req.user.name.slice(0, 120) : "Admin",
       actorRole: typeof req.user?.role === "string" ? req.user.role.slice(0, 40) : "",
@@ -94,8 +96,11 @@ export const recordAuditEvent = async (req, event) => {
       requestHost: headerValue(req, "host", 200),
       requestOrigin: safeOrigin(origin),
       refererPath: safeRefererPath(referer),
-    });
+    };
+    if (session) await AuditLog.create([document], { session });
+    else await AuditLog.create(document);
   } catch (error) {
-    console.error("Failed to record admin audit event:", error.message);
+    console.error("Failed to record admin audit event:", { action: event?.action, name: error?.name, message: error?.message });
+    if (strict) throw error;
   }
 };

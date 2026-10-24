@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { useUserStore } from "../stores/useUserStore";
 
 const LoginPage = () => {
@@ -64,7 +64,7 @@ const LoginPage = () => {
 
 							<button type="submit" disabled={loading} className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[#252722] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#41443b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f] disabled:cursor-not-allowed disabled:opacity-60">
 								{loading ? "در حال ورود..." : "ورود"}
-								{!loading && <ArrowRight size={17} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />}
+								{!loading && <ArrowLeft size={17} className="transition-transform group-hover:-translate-x-1" aria-hidden="true" />}
 							</button>
 						</form>
                         <p className="mt-3 text-left text-sm"><Link to="/forgot-password" className="font-semibold text-[#68745f] underline underline-offset-4">رمز عبور را فراموش کرده‌اید؟</Link></p>

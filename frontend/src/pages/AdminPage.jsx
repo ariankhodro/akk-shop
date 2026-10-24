@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import axios from "../lib/axios";
+import { canOpenTab, hasAnyPermission } from "../lib/admin-access";
 
 const AnalyticsTab = lazy(() => import("../components/AnalyticsTab"));
 const DashboardOverview = lazy(() => import("../components/DashboardOverview"));
@@ -30,23 +31,24 @@ const AdminPage = () => {
  const [searchParams,setSearchParams]=useSearchParams();
  const requestedTab=searchParams.get("tab");
  const [adminPermissions,setAdminPermissions]=useState(null);
- useEffect(()=>{axios.get("/auth/profile").then(({data})=>setAdminPermissions(Array.isArray(data.permissions)?data.permissions:null)).catch(()=>setAdminPermissions(null));},[]);
- const visibleGroups=useMemo(()=>{
-  if(!Array.isArray(adminPermissions)||adminPermissions.includes("*"))return groups;
-  const permissionByTab={dashboard:"reports.view",create:"catalogue.manage",products:"catalogue.manage",categories:"catalogue.manage",orders:"orders.manage","service-cases":"support.manage",customers:"customers.manage",inventory:"inventory.manage",shipping:"settings.manage",campaigns:"marketing.manage",coupons:"marketing.manage",newsletter:"marketing.manage",analytics:"reports.view",audit:"audit.view",operations:"system.view"};
-  return groups.map(group=>({...group,items:group.items.filter(tab=>adminPermissions.includes(permissionByTab[tab.id])||(tab.id==="customers"&&adminPermissions.includes("roles.manage")))})).filter(group=>group.items.length>0);
- },[adminPermissions]);
+ const [isOwner,setIsOwner]=useState(false);
+ const [profileError,setProfileError]=useState(false);
+ useEffect(()=>{axios.get("/auth/profile").then(({data})=>{setAdminPermissions(Array.isArray(data.effectivePermissions)?data.effectivePermissions:[]);setIsOwner(data.isOwner===true);}).catch(()=>{setAdminPermissions([]);setProfileError(true);});},[]);
+ // Until the profile arrives (or if it fails) nothing is offered: the UI never defaults to full access.
+ const visibleGroups=useMemo(()=>groups.map(group=>({...group,items:group.items.filter(tab=>canOpenTab(adminPermissions,tab.id))})).filter(group=>group.items.length>0),[adminPermissions]);
  const tabs=useMemo(()=>visibleGroups.flatMap(group=>group.items),[visibleGroups]);
  const initialTab=tabs.some(tab=>tab.id===requestedTab)?requestedTab:(tabs.some(tab=>tab.id==="dashboard")?"dashboard":tabs[0]?.id||"dashboard");
  const [activeTab,setActiveTab]=useState(initialTab);
  const [packingCount,setPackingCount]=useState(null);
+ const canSeeOrders=hasAnyPermission(adminPermissions,"orders.manage");
  const refreshPackingCount=useCallback(async()=>{
+  if(!canSeeOrders){setPackingCount(null);return;}
   try {
    const response=await axios.get("/orders/admin",{params:{page:1,limit:1,shipmentStatus:"processing"}});
    const total=Number(response.data?.pagination?.total);
    setPackingCount(Number.isFinite(total)&&total>=0?total:null);
   } catch { setPackingCount(null); }
- },[]);
+ },[canSeeOrders]);
  useEffect(()=>{setActiveTab(tabs.some(tab=>tab.id===requestedTab)?requestedTab:(tabs.some(tab=>tab.id==="dashboard")?"dashboard":tabs[0]?.id||"dashboard"));},[requestedTab,tabs]);
  useEffect(()=>{void refreshPackingCount();},[refreshPackingCount]);
  const selectTab=(id)=>{
@@ -87,7 +89,7 @@ const AdminPage = () => {
     </aside>
     <section className="min-w-0" id="admin-tab-panel" role="tabpanel" aria-labelledby={"admin-tab-"+activeTab}>
      <Suspense fallback={<div role="status" className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-8 text-center text-sm text-[var(--ui-muted)]">در حال بارگذاری بخش مدیریت…</div>}>
-      {activeTab==="dashboard"&&<DashboardOverview/>}{activeTab==="create"&&<CreateProductForm/>}{activeTab==="products"&&<ProductsList/>}{activeTab==="categories"&&<CategoryManager/>}{activeTab==="coupons"&&<CouponManager/>}{activeTab==="campaigns"&&<CampaignManager/>}{activeTab==="shipping"&&<ShippingSettings/>}{activeTab==="newsletter"&&<NewsletterManager/>}{activeTab==="analytics"&&<AnalyticsTab/>}{activeTab==="orders"&&<OrderManagement/>}{activeTab==="audit"&&<AuditLogTab/>}{activeTab==="operations"&&<OperationsDashboard/>}{activeTab==="customers"&&<CustomerManagement/>}{activeTab==="service-cases"&&<ServiceCases/>}{activeTab==="inventory"&&<InventoryAlerts/>}
+      {adminPermissions!==null&&tabs.length===0&&<p role={profileError?"alert":"status"} className="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-8 text-center text-sm text-[var(--ui-muted)]">{profileError?"دریافت دسترسی‌های حساب ناموفق بود؛ صفحه را تازه‌سازی کنید.":"برای این حساب هنوز دسترسی مدیریتی تعریف نشده است. با مالک فروشگاه تماس بگیرید."}</p>}{activeTab==="dashboard"&&<DashboardOverview permissions={adminPermissions}/>}{activeTab==="create"&&<CreateProductForm/>}{activeTab==="products"&&<ProductsList/>}{activeTab==="categories"&&<CategoryManager/>}{activeTab==="coupons"&&<CouponManager/>}{activeTab==="campaigns"&&<CampaignManager/>}{activeTab==="shipping"&&<ShippingSettings/>}{activeTab==="newsletter"&&<NewsletterManager/>}{activeTab==="analytics"&&<AnalyticsTab/>}{activeTab==="orders"&&<OrderManagement/>}{activeTab==="audit"&&<AuditLogTab/>}{activeTab==="operations"&&<OperationsDashboard/>}{activeTab==="customers"&&<CustomerManagement viewerIsOwner={isOwner}/>}{activeTab==="service-cases"&&<ServiceCases/>}{activeTab==="inventory"&&<InventoryAlerts/>}
      </Suspense>
     </section>
    </div>

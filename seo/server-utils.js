@@ -6,6 +6,7 @@ import {
   normalizeSeoText,
   safeJson,
 } from "../frontend/src/lib/seo-utils.js";
+import { applyHtmlSecurityHeaders } from "./security-headers.js";
 
 const DYNAMIC_META_KEYS = /^(description|robots|application-name|public-site-url|seo-preview|og:(locale|site_name|type|title|description|url|image|image:alt)|twitter:(card|title|description|image)|product:price:(amount|currency))$/i;
 
@@ -17,6 +18,29 @@ export function getRequestOrigin(req) {
   const url = new URL(protocol + "://" + host);
   if (!["http:", "https:"].includes(url.protocol)) throw new Error("Unsupported request protocol");
   return url.origin;
+}
+
+// Origin used for the functions' own server-side fetches (the SPA shell and,
+// when API_BASE_URL is relative, the API). SEC-12a: never derived from request
+// headers on a deployed instance, otherwise a forwarded Host header would turn
+// the shell fetch into an SSRF and HTML-injection primitive.
+//   1. VERCEL_URL      - this deployment (correct for previews and production)
+//   2. PUBLIC_SITE_URL - the configured public origin
+//   3. request origin  - ONLY for local development / tests (no VERCEL, not production)
+export function getInternalOrigin(requestOrigin) {
+  const vercelUrl = String(process.env.VERCEL_URL || "").trim();
+  if (vercelUrl) {
+    if (!/^(?:https?:\/\/)?[a-z0-9][a-z0-9.-]*(?::\d{1,5})?$/i.test(vercelUrl)) throw new Error("Invalid VERCEL_URL");
+    return new URL(/^https?:\/\//i.test(vercelUrl) ? vercelUrl : "https://" + vercelUrl).origin;
+  }
+  const configured = String(process.env.PUBLIC_SITE_URL || "").trim();
+  if (configured) {
+    const url = new URL(configured);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("Invalid PUBLIC_SITE_URL");
+    return url.origin;
+  }
+  if (!process.env.VERCEL && process.env.NODE_ENV !== "production") return requestOrigin;
+  throw new Error("No configured site origin (set PUBLIC_SITE_URL) for internal fetches");
 }
 
 export function getCanonicalOrigin(requestOrigin) {
@@ -41,7 +65,7 @@ export function resolveApiBase(_req, requestOrigin) {
   if (/^https?:\/\//i.test(configured)) {
     base = new URL(configured);
   } else {
-    base = new URL(configured.startsWith("/") ? configured : "/" + configured, requestOrigin);
+    base = new URL(configured.startsWith("/") ? configured : "/" + configured, getInternalOrigin(requestOrigin));
   }
   if (!["http:", "https:"].includes(base.protocol)) throw new Error("Unsupported API protocol");
   base.pathname = base.pathname.replace(/\/+$/, "");
@@ -54,7 +78,8 @@ export function resolveApiBase(_req, requestOrigin) {
 export async function getApiJson(apiBase, endpoint) {
   if (typeof endpoint !== "string" || /[\r\n]/.test(endpoint)) throw new Error("Invalid API endpoint");
   const response = await fetch(apiBase + "/" + endpoint.replace(/^\/+/, ""), {
-    headers: { Accept: "application/json" },
+    // Server-side renders must not inflate public view counters.
+    headers: { Accept: "application/json", "X-Skip-View-Count": "1" },
     signal: AbortSignal.timeout(3500),
   });
   if (!response.ok) {
@@ -65,19 +90,41 @@ export async function getApiJson(apiBase, endpoint) {
   return response.json();
 }
 
+// Last successfully fetched shell per internal origin. It is only used when a
+// fresh fetch fails (cold start, timeout, upstream hiccup), so one transient
+// error does not turn every storefront route into a 503 (FE-13).
+const lastGoodShells = new Map();
+const STALE_SHELL_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+export function resetShellCache() {
+  lastGoodShells.clear();
+}
+
 export async function fetchAppShell(requestOrigin) {
-  const response = await fetch(new URL("/index.html", requestOrigin).toString(), {
-    headers: { Accept: "text/html" },
-    signal: AbortSignal.timeout(3500),
-  });
-  if (!response.ok) throw new Error("Unable to load the storefront HTML shell");
-  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-  if (contentType && !contentType.includes("text/html")) throw new Error("The storefront shell is not HTML");
-  const html = await response.text();
-  if (!/<div\s+id=["']root["']\s*>\s*<\/div>/i.test(html)) {
-    throw new Error("The storefront HTML shell has no empty React root");
+  const origin = getInternalOrigin(requestOrigin);
+  try {
+    const response = await fetch(new URL("/index.html", origin).toString(), {
+      headers: { Accept: "text/html" },
+      signal: AbortSignal.timeout(3500),
+    });
+    if (!response.ok) throw new Error("Unable to load the storefront HTML shell");
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    if (contentType && !contentType.includes("text/html")) throw new Error("The storefront shell is not HTML");
+    const html = await response.text();
+    if (!/<div\s+id=["']root["']\s*>\s*<\/div>/i.test(html)) {
+      throw new Error("The storefront HTML shell has no empty React root");
+    }
+    if (lastGoodShells.size >= 4 && !lastGoodShells.has(origin)) lastGoodShells.clear();
+    lastGoodShells.set(origin, { html, at: Date.now() });
+    return html;
+  } catch (error) {
+    const cached = lastGoodShells.get(origin);
+    if (cached && Date.now() - cached.at < STALE_SHELL_MAX_AGE_MS) {
+      console.warn("Serving the last known storefront shell after a fetch failure", { message: error?.message });
+      return cached.html;
+    }
+    throw error;
   }
-  return html;
 }
 
 export function renderHtmlShell(shell, options = {}) {
@@ -144,7 +191,7 @@ export function renderHtmlShell(shell, options = {}) {
 
 export function sendHtml(res, status, html, options = {}) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("X-Content-Type-Options", "nosniff");
+  applyHtmlSecurityHeaders(res);
   if (options.cacheControl) res.setHeader("Cache-Control", options.cacheControl);
   if (options.robotsHeader) res.setHeader("X-Robots-Tag", options.robotsHeader);
   if (options.retryAfter) res.setHeader("Retry-After", String(options.retryAfter));

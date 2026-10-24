@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Clock3, CreditCard, Mail, PackageCheck, ShieldCheck, Truck } from "lucide-react";
+import { CheckCircle2, Clock3, CreditCard, Mail, PackageCheck, ShieldCheck, Truck } from "lucide-react";
 import axios from "../lib/axios";
 import { formatPrice } from "../lib/commerce";
 import PageMeta from "../components/PageMeta";

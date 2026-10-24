@@ -15,18 +15,7 @@
     <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/site.webmanifest" />
-    <script>
-      try {
-        const savedTheme = localStorage.getItem("tik-boutique-theme");
-        if (savedTheme === "dark") {
-          document.documentElement.dataset.theme = "dark";
-          document.documentElement.style.colorScheme = "dark";
-          document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#090a0c");
-        }
-      } catch {
-        // Fall back to the light theme when storage is unavailable.
-      }
-    </script>
+    <script src="/theme-init.js"></script>
     <title>تیک بوتیک | فروشگاه آنلاین پوشاک و اکسسوری</title>
   </head>
   <body>

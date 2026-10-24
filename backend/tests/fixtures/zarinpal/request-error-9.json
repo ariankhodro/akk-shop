@@ -1,0 +1,16 @@
+{
+  "_provenance": "CONSTRUCTED FROM OFFICIAL DOCS AS RECALLED - NOT RECORDED FROM A LIVE SANDBOX. Not sandbox-verified.",
+  "http": 200,
+  "body": {
+    "data": [],
+    "errors": {
+      "code": -9,
+      "message": "Validation error",
+      "validations": [
+        {
+          "merchant_id": "The merchant id must be 36 characters."
+        }
+      ]
+    }
+  }
+}

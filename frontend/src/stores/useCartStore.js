@@ -140,6 +140,7 @@ export const useCartStore = create((set, get) => ({
       get().initializeGuestCart();
       return;
     }
+    if (get().isMergingGuestCart) return;
     set({ isMergingGuestCart: true });
     const guestItems = readGuestCart().filter((item) => !item.guestOnly);
     try {

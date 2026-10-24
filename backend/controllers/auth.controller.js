@@ -1,102 +1,150 @@
 import { redis } from "../lib/redis.js";
 import { getPasswordPolicyError } from "../lib/password-policy.js";
 import User from "../models/user.model.js";
-import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import mongoose from "mongoose";
 import { isPasswordResetEmailConfigured, sendPasswordResetEmail } from "../lib/password-reset-email.js";
 import {
-  rotateRefreshToken as rotateStoredRefreshToken,
-  verifyPresentedRefreshToken,
+  rotateRefreshSession,
+  storeRefreshSession,
+  revokeRefreshSession,
+  ROTATION,
   isRefreshAccountActive,
 } from "../lib/refresh-token.js";
+import {
+  signAccessToken, signRefreshToken, verifyRefreshToken, tokenVersionOf,
+  ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS,
+} from "../lib/auth-tokens.js";
+import { effectivePermissions } from "../lib/rbac.js";
+import { readEmail, readPassword, readString, isPlainObject } from "../lib/input.js";
+import {
+  consumeRateLimit, peekRateLimit, resetRateLimit, normalizeClientAddress, FAIL_MODE, RateLimitUnavailableError,
+} from "../middleware/rate-limit.middleware.js";
 
-const generateTokens = (userId) => {
-	const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN_SECRET, {
-		expiresIn: "15m",
-	});
+const generateTokens = (user) => ({
+	accessToken: signAccessToken(user),
+	refreshToken: signRefreshToken(user),
+});
 
-	const refreshToken = jwt.sign({ userId }, process.env.REFRESH_TOKEN_SECRET, {
-		expiresIn: "7d",
-	});
+// Cookies are Secure unless the operator explicitly opts into plain HTTP for
+// local development. NODE_ENV alone must not silently downgrade them.
+const cookieOptions = () => ({
+	httpOnly: true, // not readable from JavaScript
+	secure: process.env.ALLOW_INSECURE_COOKIES !== "true",
+	sameSite: "strict", // blocks cross-site requests
+});
 
-	return { accessToken, refreshToken };
-};
-
-const storeRefreshToken = async (userId, refreshToken) => {
-	await redis.set(`refresh_token:${userId}`, refreshToken, "EX", 7 * 24 * 60 * 60); // 7days
+const clearAuthCookies = (res) => {
+	res.clearCookie("accessToken", { ...cookieOptions(), path: "/" });
+	res.clearCookie("refreshToken", { ...cookieOptions(), path: "/api/auth" });
+	// Cookies issued before the refresh cookie was path-scoped lived at "/".
+	res.clearCookie("refreshToken", { ...cookieOptions(), path: "/" });
 };
 
 const setCookies = (res, accessToken, refreshToken) => {
-	res.cookie("accessToken", accessToken, {
-		httpOnly: true, // prevent XSS attacks, cross site scripting attack
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "strict", // prevents CSRF attack, cross-site request forgery attack
-		maxAge: 15 * 60 * 1000, // 15 minutes
-	});
-	res.cookie("refreshToken", refreshToken, {
-		httpOnly: true, // prevent XSS attacks, cross site scripting attack
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "strict", // prevents CSRF attack, cross-site request forgery attack
-		maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-	});
+	res.cookie("accessToken", accessToken, { ...cookieOptions(), path: "/", maxAge: ACCESS_TOKEN_TTL_SECONDS * 1000 });
+	// The refresh token is only ever needed by /api/auth/refresh-token and logout.
+	res.cookie("refreshToken", refreshToken, { ...cookieOptions(), path: "/api/auth", maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000 });
 };
 
+const sendRateLimitUnavailable = (res) => {
+	res.set("Retry-After", "30");
+	return res.status(503).json({ message: "سرویس موقتاً در دسترس نیست؛ چند دقیقه بعد دوباره تلاش کنید." });
+};
+
+const securityLog = (event, details = {}) =>
+	console.warn(JSON.stringify({ level: "warn", event, ...details }));
+
+// Failed-login throttles. Two keys: one per account+client address (tight) and one
+// per account across all addresses (loose, stops distributed guessing without
+// letting a single attacker lock a victim out after a handful of requests).
+const LOGIN_FAIL_WINDOW_SECONDS = 900;
+const LOGIN_FAIL_PER_ACCOUNT_IP = 5;
+const LOGIN_FAIL_PER_ACCOUNT = 20;
+
+const invalidCredentials = (res) => res.status(401).json({ message: "Invalid email or password" });
+
 export const signup = async (req, res) => {
-	const { email, password, name } = req.body;
-	const passwordError = getPasswordPolicyError(password);
-	if (passwordError) return res.status(400).json({ message: passwordError, fieldErrors: { password: passwordError } });
+	const body = isPlainObject(req.body) ? req.body : {};
+	const email = readEmail(body.email);
+	const name = readString(body.name, { min: 2, max: 100 });
+	const password = readPassword(body.password);
+	const fieldErrors = {};
+	if (!email) fieldErrors.email = "ایمیل معتبر وارد کنید.";
+	if (!name) fieldErrors.name = "نام باید بین ۲ تا ۱۰۰ نویسه باشد.";
+	const passwordError = password === null ? "رمز عبور را وارد کنید." : getPasswordPolicyError(password);
+	if (passwordError) fieldErrors.password = passwordError;
+	if (Object.keys(fieldErrors).length) {
+		return res.status(400).json({ message: Object.values(fieldErrors)[0], fieldErrors });
+	}
 	try {
-		const userExists = await User.findOne({ email });
-
-		if (userExists) {
-			return res.status(400).json({ message: "User already exists" });
-		}
 		const user = await User.create({ name, email, password });
-
-		// authenticate
-		const { accessToken, refreshToken } = generateTokens(user._id);
-		await storeRefreshToken(user._id, refreshToken);
-
+		const { accessToken, refreshToken } = generateTokens(user);
+		await storeRefreshSession(redis, user._id, refreshToken);
 		setCookies(res, accessToken, refreshToken);
-
-		res.status(201).json({
+		return res.status(201).json({
 			_id: user._id,
 			name: user.name,
 			email: user.email,
 			role: user.role,
-      defaultShippingAddress: user.defaultShippingAddress,
+			defaultShippingAddress: user.defaultShippingAddress,
 		});
 	} catch (error) {
+		if (error?.code === 11000) {
+			// Without email verification a duplicate cannot be hidden entirely; the
+			// per-address signup limiter bounds how fast it can be probed.
+			return res.status(409).json({ message: "ثبت‌نام با این مشخصات انجام نشد؛ اگر قبلاً ثبت‌نام کرده‌اید وارد شوید یا رمز عبور را بازیابی کنید." });
+		}
 		console.error("Signup failed", { name: error?.name, message: error?.message });
 		return res.status(500).json({ message: "Unable to create account" });
 	}
 };
 
 export const login = async (req, res) => {
+	const body = isPlainObject(req.body) ? req.body : {};
+	const email = readEmail(body.email);
+	const password = readPassword(body.password);
+	// Malformed input is rejected before any query is built, with the same
+	// response as wrong credentials so type probing yields no signal.
+	if (!email || password === null) return invalidCredentials(res);
+
+	const clientAddress = normalizeClientAddress(req.ip);
+	const accountIpKey = [email, clientAddress];
 	try {
-		const { email, password } = req.body;
-		const user = await User.findOne({ email });
-
-		if (user && (await user.comparePassword(password))) {
-      if (!isRefreshAccountActive(user)) {
-        return res.status(403).json({ message: "This account is inactive. Contact support." });
-      }
-
-			const { accessToken, refreshToken } = generateTokens(user._id);
-			await storeRefreshToken(user._id, refreshToken);
-			setCookies(res, accessToken, refreshToken);
-
-			res.json({
-				_id: user._id,
-				name: user.name,
-				email: user.email,
-				role: user.role,
-			});
-		} else {
-			res.status(400).json({ message: "Invalid email or password" });
+		const [perAccountIp, perAccount] = await Promise.all([
+			peekRateLimit({ name: "login-fail-account-ip", keyParts: accountIpKey }),
+			peekRateLimit({ name: "login-fail-account", keyParts: email }),
+		]);
+		if (perAccountIp.count >= LOGIN_FAIL_PER_ACCOUNT_IP || perAccount.count >= LOGIN_FAIL_PER_ACCOUNT) {
+			const retry = Math.max(perAccountIp.resetSeconds, perAccount.resetSeconds);
+			res.set("Retry-After", String(retry));
+			return res.status(429).json({ message: "تعداد تلاش‌های ناموفق ورود بیش از حد مجاز است؛ بعداً دوباره تلاش کنید." });
 		}
+
+		const user = await User.findOne({ email });
+		const passwordMatches = user
+			? await user.comparePassword(password)
+			: await User.burnPasswordCheck(password);
+
+		if (!user || !passwordMatches) {
+			await Promise.all([
+				consumeRateLimit({ name: "login-fail-account-ip", keyParts: accountIpKey, windowSeconds: LOGIN_FAIL_WINDOW_SECONDS, failMode: FAIL_MODE.CLOSED }),
+				consumeRateLimit({ name: "login-fail-account", keyParts: email, windowSeconds: LOGIN_FAIL_WINDOW_SECONDS, failMode: FAIL_MODE.CLOSED }),
+			]);
+			return invalidCredentials(res);
+		}
+		if (!isRefreshAccountActive(user)) {
+			return res.status(403).json({ message: "This account is inactive. Contact support." });
+		}
+
+		const { accessToken, refreshToken } = generateTokens(user);
+		await storeRefreshSession(redis, user._id, refreshToken);
+		setCookies(res, accessToken, refreshToken);
+		await resetRateLimit({ name: "login-fail-account-ip", keyParts: accountIpKey });
+
+		return res.json({ _id: user._id, name: user.name, email: user.email, role: user.role });
 	} catch (error) {
+		if (error instanceof RateLimitUnavailableError) return sendRateLimitUnavailable(res);
 		console.error("Login failed", { name: error?.name, message: error?.message });
 		return res.status(500).json({ message: "Unable to sign in" });
 	}
@@ -349,14 +397,19 @@ export const deleteShippingAddress = async (req, res) => {
 };
 
 export const forgotPassword = async (req, res) => {
-  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ message: "ایمیل معتبر وارد کنید." });
-  }
+  const email = readEmail(isPlainObject(req.body) ? req.body.email : undefined);
+  if (!email) return res.status(400).json({ message: "ایمیل معتبر وارد کنید." });
   if (!isPasswordResetEmailConfigured()) {
     return res.status(503).json({ message: "بازیابی رمز عبور هنوز در این محیط پیکربندی نشده است." });
   }
   try {
+    // One recovery email per address per minute: stops mail flooding and stops an
+    // attacker from invalidating a victim's pending link by repeating requests.
+    const usage = await consumeRateLimit({
+      name: "forgot-per-email", keyParts: email, windowSeconds: 60, failMode: FAIL_MODE.CLOSED,
+    });
+    if (usage.count > 1) return res.json({ message: genericRecoveryMessage });
+
     const user = await User.findOne({ email });
     if (user) {
       const token = crypto.randomBytes(32).toString("hex");
@@ -376,31 +429,46 @@ export const forgotPassword = async (req, res) => {
     }
     return res.json({ message: genericRecoveryMessage });
   } catch (error) {
+    if (error instanceof RateLimitUnavailableError) return sendRateLimitUnavailable(res);
     console.error("Password recovery request failed", error.message);
     return res.status(500).json({ message: "درخواست بازیابی رمز عبور انجام نشد." });
   }
 };
 
 export const resetPassword = async (req, res) => {
-  const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
-  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  const body = isPlainObject(req.body) ? req.body : {};
+  const token = readString(body.token, { min: 64, max: 64 }) ?? "";
+  const password = readPassword(body.password) ?? "";
   if (!/^[a-f0-9]{64}$/i.test(token)) return res.status(400).json({ message: "لینک بازیابی نامعتبر یا منقضی شده است." });
   const passwordError = getPasswordPolicyError(password);
   if (passwordError) return res.status(400).json({ message: passwordError, fieldErrors: { password: passwordError } });
   try {
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const user = await User.findOne({
-      passwordResetTokenHash: tokenHash,
-      passwordResetExpiresAt: { $gt: new Date() },
-    }).select("+passwordResetTokenHash +passwordResetExpiresAt");
+    const tokenHash = crypto.createHash("sha256").update(token.toLowerCase()).digest("hex");
+    // Consume the token atomically so two concurrent requests cannot both succeed.
+    const user = await User.findOneAndUpdate(
+      { passwordResetTokenHash: tokenHash, passwordResetExpiresAt: { $gt: new Date() } },
+      { $unset: { passwordResetTokenHash: "", passwordResetExpiresAt: "" } },
+      { new: false },
+    ).select("+passwordResetTokenHash +passwordResetExpiresAt");
     if (!user) return res.status(400).json({ message: "لینک بازیابی نامعتبر یا منقضی شده است." });
+
+    // Revoke sessions before the new password becomes usable, so a Redis failure
+    // cannot leave old refresh tokens valid next to a changed password.
+    await revokeRefreshSession(redis, user._id);
     user.password = password;
+    user.tokenVersion = tokenVersionOf(user) + 1;
     user.passwordResetTokenHash = undefined;
     user.passwordResetExpiresAt = undefined;
-    await user.save();
-    await redis.del("refresh_token:" + user._id);
-    res.clearCookie("accessToken");
-    res.clearCookie("refreshToken");
+    try {
+      await user.save();
+    } catch (saveError) {
+      // Give the user their link back if the password could not be stored.
+      await User.updateOne({ _id: user._id, passwordResetTokenHash: { $exists: false } },
+        { $set: { passwordResetTokenHash: tokenHash, passwordResetExpiresAt: user.get("passwordResetExpiresAt") ?? new Date(Date.now() + 5 * 60 * 1000) } }).catch(() => {});
+      throw saveError;
+    }
+    clearAuthCookies(res);
+    securityLog("auth.password_reset", { userId: String(user._id) });
     return res.json({ message: "رمز عبور تغییر کرد؛ اکنون وارد حساب شوید." });
   } catch (error) {
     console.error("Password reset failed", error.message);
@@ -411,76 +479,73 @@ export const resetPassword = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
-    if (refreshToken) {
+    if (typeof refreshToken === "string" && refreshToken) {
       try {
-        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-        await redis.del(`refresh_token:${decoded.userId}`);
+        const decoded = verifyRefreshToken(refreshToken);
+        await revokeRefreshSession(redis, decoded.userId);
       } catch (error) {
         if (!["TokenExpiredError", "JsonWebTokenError", "NotBeforeError"].includes(error?.name)) throw error;
       }
     }
-    res.clearCookie("accessToken");
-    res.clearCookie("refreshToken");
+    clearAuthCookies(res);
     return res.json({ message: "Logged out successfully" });
   } catch (error) {
     console.error("Logout failed", { name: error?.name, message: error?.message });
-    res.clearCookie("accessToken");
-    res.clearCookie("refreshToken");
+    clearAuthCookies(res);
     return res.status(503).json({ message: "Unable to complete logout right now" });
   }
 };
 
 // Rotate the refresh token atomically: only the request holding the current token
-// can replace it, so parallel/replayed refresh requests cannot both succeed.
+// can replace it, so parallel/replayed refresh requests cannot both succeed. A
+// stale token replayed after rotation revokes the session (possible theft).
 export const refreshToken = async (req, res) => {
   const presentedToken = req.cookies?.refreshToken;
-  if (!presentedToken) {
+  const expired = () => {
+    clearAuthCookies(res);
+    return res.status(401).json({ message: "Authentication session expired. Please sign in again." });
+  };
+  if (typeof presentedToken !== "string" || !presentedToken) {
     return res.status(401).json({ message: "Authentication session expired. Please sign in again." });
   }
 
   let decoded;
   try {
-    decoded = verifyPresentedRefreshToken(presentedToken, process.env.REFRESH_TOKEN_SECRET);
+    decoded = verifyRefreshToken(presentedToken);
   } catch (error) {
+    if (["TokenExpiredError", "JsonWebTokenError", "NotBeforeError"].includes(error?.name)) return expired();
     console.error("Refresh token verification failed", { name: error?.name, code: error?.code });
     return res.status(500).json({ message: "Unable to refresh session" });
   }
-  if (!decoded) {
-    res.clearCookie("accessToken");
-    res.clearCookie("refreshToken");
-    return res.status(401).json({ message: "Authentication session expired. Please sign in again." });
-  }
 
   try {
-    const user = await User.findById(decoded.userId).select("_id isActive");
-    if (!isRefreshAccountActive(user)) {
+    const user = await User.findById(decoded.userId).select("_id isActive tokenVersion");
+    if (!isRefreshAccountActive(user) || tokenVersionOf(user) !== decoded.tv) {
       try {
-        await redis.del(`refresh_token:${decoded.userId}`);
+        await revokeRefreshSession(redis, decoded.userId);
       } catch (error) {
         console.warn("Unable to revoke refresh token for inactive account", {
           name: error?.name || "Error",
           code: typeof error?.code === "string" ? error.code : undefined,
         });
-        res.clearCookie("accessToken");
-        res.clearCookie("refreshToken");
+        clearAuthCookies(res);
         return res.status(503).json({ message: "Session service is temporarily unavailable. Please try again." });
       }
-      res.clearCookie("accessToken");
-      res.clearCookie("refreshToken");
-      return res.status(401).json({ message: "Authentication session expired. Please sign in again." });
+      return expired();
     }
 
-    const { accessToken, refreshToken: nextRefreshToken } = generateTokens(decoded.userId);
-    const rotated = await rotateStoredRefreshToken({
-      redisClient: redis,
-      userId: decoded.userId,
-      presentedToken,
-      nextRefreshToken,
+    const { accessToken, refreshToken: nextRefreshToken } = generateTokens(user);
+    const outcome = await rotateRefreshSession({
+      redisClient: redis, userId: decoded.userId, presentedToken, nextRefreshToken,
     });
-    if (!rotated) {
-      res.clearCookie("accessToken");
-      res.clearCookie("refreshToken");
-      return res.status(401).json({ message: "Authentication session expired. Please sign in again." });
+    if (outcome === ROTATION.RACE) {
+      // A concurrent request (typically another tab) already rotated this token.
+      // Its response carries the new cookies, so keep the browser's cookies intact.
+      return res.status(401).json({ message: "Session was refreshed elsewhere. Retry the request." });
+    }
+    if (outcome !== ROTATION.ROTATED) {
+      if (outcome === ROTATION.REUSED) securityLog("auth.refresh_token_reuse", { userId: String(decoded.userId) });
+      return expired();
     }
     setCookies(res, accessToken, nextRefreshToken);
     return res.json({ message: "Session refreshed successfully" });
@@ -495,7 +560,10 @@ export const getProfile = async (req, res) => {
   const user = await User.findById(req.user._id).select("-password");
   if (!user) return res.status(404).json({ message: "حساب کاربری پیدا نشد." });
   if (ensureAddressBook(user)) await user.save();
-  return res.json(user);
+  // The server is the single source of truth for what the UI may show:
+  // effectivePermissions already accounts for the owner tier and deny-by-default.
+  const { tokenVersion: _tokenVersion, ...profile } = user.toObject();
+  return res.json({ ...profile, effectivePermissions: effectivePermissions(user) });
  } catch (error) {
   console.error("Loading customer profile failed", error.message);
   return res.status(500).json({ message: "دریافت اطلاعات پروفایل ناموفق بود." });

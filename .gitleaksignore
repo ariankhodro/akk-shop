@@ -1,0 +1,2 @@
+# False positive: throw-away constants for a disposable e2e run (replaced by runtime-generated values). Not credentials.
+05dfac8c9c7f1348fec2598196feb57083c42232:e2e/run.mjs:generic-api-key:55

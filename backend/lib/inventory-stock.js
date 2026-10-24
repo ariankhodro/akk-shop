@@ -21,3 +21,13 @@ export const hasConfiguredInventory = (product) => {
 };
 
 export const hasKnownFiniteStock = (product) => parseKnownQuantity(product?.stock) !== null;
+
+// Admin stock edits are deltas against the live value, not absolute overwrites, so units
+// reserved by customers between the admin's read and write are preserved (BIZ-5).
+// `baseline` is the value the admin saw; without a known baseline the submitted value wins.
+export const applyStockDelta = (liveValue, baseline, submitted) => {
+  if (!Number.isSafeInteger(liveValue) || !Number.isSafeInteger(baseline)) return submitted;
+  return liveValue + (submitted - baseline);
+};
+
+export const stockConflictError = (code) => Object.assign(new Error(code), { code });

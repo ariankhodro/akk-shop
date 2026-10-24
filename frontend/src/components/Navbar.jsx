@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "../lib/axios";
 import { formatPrice } from "../lib/commerce";
+import { normalizeDigits } from "../lib/normalize-digits";
 import {
   ShoppingCart,
   Truck,
@@ -466,11 +467,35 @@ const Navbar = () => {
     }
   };
 
+  const suggestionOptionCount = categorySuggestions.length + searchSuggestions.products.length;
+  // ARIA combobox state for the search input of a given surface ("desktop" | "mobile").
+  const comboboxProps = (surface) => {
+    const open = activeSearchSurface === surface && suggestionQuery.length >= 2;
+    return {
+      role: "combobox",
+      "aria-autocomplete": "list",
+      "aria-haspopup": "listbox",
+      "aria-expanded": open,
+      "aria-controls": open ? `${surface}-search-suggestions` : undefined,
+      "aria-activedescendant": open && activeSuggestionIndex >= 0 && activeSuggestionIndex < suggestionOptionCount
+        ? `${surface}-search-option-${activeSuggestionIndex}`
+        : undefined,
+    };
+  };
+
   const renderSearchSuggestions = (surface) => {
     if (activeSearchSurface !== surface || suggestionQuery.length < 2) return null;
-    const hasSuggestions = categorySuggestions.length > 0 || searchSuggestions.products.length > 0;
+    const hasSuggestions = suggestionOptionCount > 0;
 
     return (
+      <>
+      <p role="status" className="sr-only">
+        {searchSuggestions.loading
+          ? "در حال جست‌وجوی محصولات"
+          : hasSuggestions
+            ? `${new Intl.NumberFormat("fa-IR").format(suggestionOptionCount)} پیشنهاد موجود است`
+            : "پیشنهادی پیدا نشد"}
+      </p>
       <div
         id={`${surface}-search-suggestions`}
         role="listbox"
@@ -483,7 +508,9 @@ const Navbar = () => {
             {categorySuggestions.map(([value, label], index) => (
               <button
                 key={value}
+                id={`${surface}-search-option-${index}`}
                 type="button"
+                tabIndex={-1}
                 role="option"
                 aria-selected={activeSuggestionIndex === index}
                 onMouseEnter={() => setActiveSuggestionIndex(index)}
@@ -505,7 +532,9 @@ const Navbar = () => {
               return (
                 <button
                   key={product._id}
+                  id={`${surface}-search-option-${optionIndex}`}
                   type="button"
+                  tabIndex={-1}
                   role="option"
                   aria-selected={activeSuggestionIndex === optionIndex}
                   onMouseEnter={() => setActiveSuggestionIndex(optionIndex)}
@@ -538,6 +567,7 @@ const Navbar = () => {
           <p className="px-3 py-3 text-sm text-[var(--ui-muted)]">پیشنهادی پیدا نشد؛ عبارت دیگری را امتحان کنید.</p>
         )}
       </div>
+      </>
     );
   };
 
@@ -702,29 +732,27 @@ const Navbar = () => {
             <label className="text-xs text-[var(--ui-muted)]">
               از
               <input
-                type="number"
-                min="0"
-                step="1"
+                type="text"
                 inputMode="numeric"
+                autoComplete="off"
                 dir="ltr"
                 placeholder="بدون محدودیت"
                 className={fieldClass}
                 value={filters.minPrice}
-                onChange={(event) => updateFilter("minPrice", event.target.value)}
+                onChange={(event) => updateFilter("minPrice", normalizeDigits(event.target.value).replace(/\D/g, ""))}
               />
             </label>
             <label className="text-xs text-[var(--ui-muted)]">
               تا
               <input
-                type="number"
-                min="0"
-                step="1"
+                type="text"
                 inputMode="numeric"
+                autoComplete="off"
                 dir="ltr"
                 placeholder="بدون محدودیت"
                 className={fieldClass}
                 value={filters.maxPrice}
-                onChange={(event) => updateFilter("maxPrice", event.target.value)}
+                onChange={(event) => updateFilter("maxPrice", normalizeDigits(event.target.value).replace(/\D/g, ""))}
               />
             </label>
           </div>
@@ -999,9 +1027,7 @@ const Navbar = () => {
                     onKeyDown={handleSuggestionKeyDown}
                     onChange={(event) => updateFilter("q", event.target.value)}
                     aria-label="نام یا توضیحات محصول"
-                    aria-autocomplete="list"
-                    aria-controls="desktop-search-suggestions"
-                    aria-expanded={activeSearchSurface === "desktop" && suggestionQuery.length >= 2}
+                    {...comboboxProps("desktop")}
                     autoComplete="off"
                     placeholder="جست‌وجوی محصولات..."
                     className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-[var(--ui-text)] outline-none placeholder:text-[var(--ui-muted)]"
@@ -1333,9 +1359,7 @@ const Navbar = () => {
                   onFocus={() => setActiveSearchSurface("mobile")}
                   onKeyDown={handleSuggestionKeyDown}
                   onChange={(event) => updateFilter("q", event.target.value)}
-                  aria-autocomplete="list"
-                  aria-controls="mobile-search-suggestions"
-                  aria-expanded={activeSearchSurface === "mobile" && suggestionQuery.length >= 2}
+                  {...comboboxProps("mobile")}
                   autoComplete="off"
                   placeholder="مثلاً کت، کیف، شلوار جین..."
                   className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-[var(--ui-text)] outline-none placeholder:text-[var(--ui-muted)]"

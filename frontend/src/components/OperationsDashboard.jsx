@@ -68,6 +68,7 @@ const OperationsDashboard = () => {
             <Stat icon={Truck} title="سفارش‌های در صف ارسال" value={data.fulfillment?.paidAwaitingShipment} detail="در انتظار آماده‌سازی یا بسته‌بندی" />
             <Stat icon={AlertTriangle} title="ارسال بدون کد رهگیری" value={data.fulfillment?.shippedWithoutTracking} detail="سفارش‌های ارسال‌شده بدون کد رهگیری" />
             <Stat icon={Wallet} title="پرداخت ناموفق در ۲۴ ساعت" value={data.payments?.failedLast24Hours} />
+            <Stat icon={Wallet} title="پرداخت‌های نیازمند بررسی دستی" value={data.payments?.needingManualReview} />
             <Stat icon={Database} title="رویدادهای مدیریتی در ۲۴ ساعت" value={data.audit?.eventsLast24Hours} />
           </div>
         </>

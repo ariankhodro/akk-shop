@@ -20,6 +20,8 @@ A production-focused MERN storefront with whole-Toman pricing, Zarinpal checkout
   <img src="https://img.shields.io/badge/Persian-fa--IR%20%7C%20RTL-68745f?style=flat-square" alt="Persian right-to-left interface" />
 </p>
 
+> **Licensing is unresolved** (LICENSE is GPL-2.0, the badge says MIT, `package.json` says ISC; image provenance unknown). See [docs/legal/licensing-status.md](docs/legal/licensing-status.md) before redistributing. Security status: [docs/security/remediation-report.md](docs/security/remediation-report.md).
+
 [Features](#-features) · [Architecture](#-architecture) · [Setup](#-getting-started) · [Environment](#-environment-variables) · [API](#-api-reference) · [Deployment](#-deployment) · [Testing](#-testing-and-migrations)
 
 </div>

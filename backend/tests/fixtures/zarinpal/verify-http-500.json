@@ -1,0 +1,7 @@
+{
+  "_provenance": "CONSTRUCTED FROM OFFICIAL DOCS AS RECALLED - NOT RECORDED FROM A LIVE SANDBOX. Not sandbox-verified.",
+  "http": 500,
+  "body": {
+    "message": "Internal Server Error"
+  }
+}

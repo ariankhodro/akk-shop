@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { useUserStore } from "../stores/useUserStore";
 import { getPasswordPolicyError } from "../lib/password-policy";
 
@@ -97,7 +97,7 @@ const SignUpPage = () => {
 
 							<button type="submit" disabled={loading} className="group mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#252722] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#41443b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f] disabled:cursor-not-allowed disabled:opacity-60">
 								{loading ? "در حال ایجاد حساب..." : "ایجاد حساب کاربری"}
-								{!loading && <ArrowRight size={17} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />}
+								{!loading && <ArrowLeft size={17} className="transition-transform group-hover:-translate-x-1" aria-hidden="true" />}
 							</button>
 						</form>
 

@@ -9,7 +9,8 @@ const configuredOrigins = () => {
     ...(process.env.CORS_ALLOWED_ORIGINS || "").split(","),
   ].filter((value) => typeof value === "string" && value.trim());
 
-  if (process.env.NODE_ENV !== "production") {
+  // Local development origins require an explicit opt-in and never apply in production.
+  if (process.env.ALLOW_DEV_ORIGINS === "true" && process.env.NODE_ENV !== "production") {
     values.push("http://localhost:5173", "http://127.0.0.1:5173");
   }
 

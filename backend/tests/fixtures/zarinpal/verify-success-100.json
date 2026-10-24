@@ -1,0 +1,16 @@
+{
+  "_provenance": "CONSTRUCTED FROM OFFICIAL DOCS AS RECALLED - NOT RECORDED FROM A LIVE SANDBOX. Not sandbox-verified.",
+  "http": 200,
+  "body": {
+    "data": {
+      "code": 100,
+      "message": "Verified",
+      "card_hash": "1EBE3EBEBE35C7EC0F8D6EE4F2F859107A87A824D4AC82E6B1A1E1CDF0B6C0E3",
+      "card_pan": "502229******5995",
+      "ref_id": 201,
+      "fee_type": "Merchant",
+      "fee": 0
+    },
+    "errors": []
+  }
+}

@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import axios from "../lib/axios";
 import { formatPrice, getCurrencyLabel, STORE_CURRENCY } from "../lib/commerce";
 import { normalizeDigits, normalizePersianText as normalizePersian } from "../lib/persian-search";
+import { useDialog } from "../lib/use-dialog";
 import { useProductStore } from "../stores/useProductStore";
 import { useCategoryStore } from "../stores/useCategoryStore";
 
@@ -90,7 +91,9 @@ const filtersFromParams = (params) => {
   try {
     const attributes = JSON.parse(params.get("attributes") || "{}");
     if (attributes && typeof attributes === "object" && !Array.isArray(attributes)) filters.attributes = attributes;
-  } catch {}
+  } catch {
+    // Malformed "attributes" query param: ignore it and keep default filters.
+  }
   return filters;
 };
 
@@ -144,6 +147,7 @@ const CategoryPage = () => {
   const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
   const [draftFilters, setDraftFilters] = useState(() => filtersFromParams(searchParams));
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const mobileFiltersRef = useDialog({ open: mobileFiltersOpen, onClose: () => setMobileFiltersOpen(false) });
   const [page, setPage] = useState(() => parsePageNumber(searchParams.get("page")));
   const [draftResultCount, setDraftResultCount] = useState(0);
 
@@ -189,7 +193,7 @@ const CategoryPage = () => {
     fetchProductsByCategory(category, query.toString());
   }, [fetchProductsByCategory, category, filters, page]);
 
-  const catalog = Array.isArray(products) ? products : [];
+  const catalog = useMemo(() => (Array.isArray(products) ? products : []), [products]);
   const priceBounds = useMemo(() => {
     const reportedCount = Number(remotePriceBounds?.count);
     const reportedMin = Number(remotePriceBounds?.minPrice);
@@ -858,6 +862,7 @@ const CategoryPage = () => {
             className="absolute inset-0 h-full w-full bg-[#252722]/45 backdrop-blur-sm"
           />
           <section
+            ref={mobileFiltersRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-category-filters-title"

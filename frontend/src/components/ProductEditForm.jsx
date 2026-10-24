@@ -3,6 +3,7 @@ import { ExternalLink, ImagePlus, LoaderCircle, Save, X } from "lucide-react";
 import { useProductStore } from "../stores/useProductStore";
 import { useCategoryStore } from "../stores/useCategoryStore";
 import { formatPrice, getCurrencyLabel, STORE_CURRENCY } from "../lib/commerce";
+import { useDialog } from "../lib/use-dialog";
 
 const currencyLabel = getCurrencyLabel(STORE_CURRENCY);
 const fitOptions = [
@@ -79,6 +80,7 @@ const makeInitialForm = (product) => {
 };
 
 const ProductEditForm = ({ product, onClose, onSaved }) => {
+  const dialogRef = useDialog({ open: true, onClose });
   const [form, setForm] = useState(() => makeInitialForm(product));
   const [variantStocks, setVariantStocks] = useState(() => Object.fromEntries(
     (product.variants || []).map((variant) => [variantKey(variant.size || "", variant.color || ""), String(variant.stock ?? 0)])
@@ -205,6 +207,9 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
         description: form.description.trim(),
         price: Number(form.price),
         stock: combinations.length ? null : (form.stock === "" ? null : Number(form.stock)),
+        // The stock the admin was looking at: the server applies the change as a delta
+        // against it so reservations made meanwhile are never overwritten.
+        stockBaseline: product.stock ?? null,
         category: selectedCategory?.slug || form.category.trim(),
         categoryId: selectedCategory?.isLegacyFallback
           ? (!adminCategories.length && form.categoryId && !String(form.categoryId).startsWith("legacy:") ? form.categoryId : "")
@@ -216,6 +221,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
         colors,
         variants: combinations.map((variant) => ({
           size: variant.size, color: variant.color, stock: Number(variantStocks[variant.key] ?? 0),
+          stockBaseline: (product.variants || []).find((stored) => (stored.size || "") === (variant.size || "") && (stored.color || "") === (variant.color || ""))?.stock ?? null,
         })),
         fit: { type: form.fitType, description: form.fitDescription, modelHeight: form.modelHeight, modelSize: form.modelSize },
         sizeChart,
@@ -230,7 +236,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
 
   return (
     <div className="fixed inset-0 z-[120] overflow-y-auto bg-black/60 p-3 backdrop-blur-sm sm:p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="product-edit-title" dir="rtl" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} className="mx-auto my-4 max-w-5xl rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 text-[var(--ui-text)] shadow-2xl sm:my-8 sm:p-7">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="product-edit-title" dir="rtl" className="mx-auto my-4 max-w-5xl rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 text-[var(--ui-text)] shadow-2xl sm:my-8 sm:p-7">
         <div className="mb-5 flex items-start justify-between gap-3 border-b border-[var(--ui-border)] pb-4">
           <div>
             <h2 id="product-edit-title" className="text-xl font-bold text-[var(--ui-accent)] sm:text-2xl">ویرایش محصول</h2>

@@ -6,7 +6,6 @@ import {
   buildSiteStructuredData,
   canonicalUrlFor,
   canonicalUrlForQuery,
-  escapeHtml,
   getSchemaAvailability,
   normalizeSeoText,
   hasIndexExcludedQuery,

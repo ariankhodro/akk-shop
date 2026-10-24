@@ -7,6 +7,7 @@ import { useCartStore } from "../stores/useCartStore";
 import { useUserStore } from "../stores/useUserStore";
 import axios from "../lib/axios";
 import { formatPrice, STORE_CURRENCY } from "../lib/commerce";
+import { normalizeDigits } from "../lib/normalize-digits";
 import GiftCouponCard from "./GiftCouponCard";
 
 const provinces = [
@@ -16,11 +17,6 @@ const provinces = [
   "قزوین", "قم", "کردستان", "کرمان", "کرمانشاه", "کهگیلویه و بویراحمد",
   "گلستان", "گیلان", "لرستان", "مازندران", "مرکزی", "هرمزگان", "همدان", "یزد",
 ];
-const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
-const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
-const normalizeDigits = (value) => String(value ?? "")
-  .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
-  .replace(/[٠-٩]/g, (digit) => String(arabicDigits.indexOf(digit)));
 const normalizeIranPhone = (value) => {
   let digits = normalizeDigits(value).replace(/\D/g, "");
   if (digits.startsWith("0098") && digits.length === 14) digits = `0${digits.slice(4)}`;

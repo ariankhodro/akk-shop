@@ -1,6 +1,7 @@
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
+import { recordAuditEvent } from "../lib/audit-log.js";
 
 const paidOrderMatch = (startDate, endDate) => ({
   currency: "IRT",
@@ -99,6 +100,13 @@ export const exportSalesCsv = async (req, res) => {
       order.paymentStatus, order.shipmentStatus, order.subtotalAmount, order.shippingFee,
       order.couponCode, order.couponDiscountAmount, order.totalAmount, order.zarinpalRefId,
     ]);
+    // The export contains customer names and emails: record who pulled it. A failed
+    // audit write blocks the download rather than allowing an untraceable export.
+    await recordAuditEvent(req, {
+      action: "analytics.exported", targetType: "report", targetId: "sales-csv",
+      summary: "Sales report CSV exported",
+      metadata: { days, rows: orders.length, containsPersonalData: true },
+    }, { strict: true });
     const csv = "\uFEFF" + [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="tik-boutique-sales-${days}d-${endDate.toISOString().slice(0, 10)}.csv"`);

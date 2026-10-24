@@ -8,7 +8,6 @@ import sitemapProductsHandler from "../../api/sitemap-products.js";
 import sitemapStaticHandler from "../../api/sitemap-static.js";
 
 const SHOP_ORIGIN = "https://shop.example";
-const PREVIEW_ORIGIN = "https://preview.example";
 const API_ORIGIN = "https://api.example";
 const PRODUCT_ID = "64f123456789abcdef123456";
 const SECOND_PRODUCT_ID = "64f123456789abcdef123457";
@@ -96,7 +95,7 @@ function createRequest(path, query = {}, method = "GET") {
 function mockedFetch(apiResponder) {
   return async (input) => {
     const url = new URL(typeof input === "string" ? input : input.url);
-    if (url.origin === PREVIEW_ORIGIN && url.pathname === "/index.html") {
+    if (url.origin === SHOP_ORIGIN && url.pathname === "/index.html") {
       return new Response(SHELL, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8" },

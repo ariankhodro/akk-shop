@@ -157,20 +157,26 @@ test("a failed transaction keeps the stock and reservation recoverable", { skip:
     t.skip("Requires a MongoDB replica set or sharded cluster.");
     return;
   }
+  // The previous version of this test provoked the failure with a missing variant and
+  // expected RESERVED_INVENTORY_TARGET_NOT_FOUND. BIZ-6 intentionally removed that throw
+  // (a missing variant now marks the line releaseSkipped, see inventory-release.integration.test.js),
+  // so the rollback guarantee is exercised with an injected persistence failure instead.
   const product = await createProduct({ variants: [{ size: "M", color: "Red", stock: 7 }] });
   const order = await createOrder(product, {
     products: [{
       product: product._id,
       quantity: 2,
       price: product.price,
-      size: "MISSING",
+      size: "M",
       color: "Red",
       hasVariant: true,
       stockReserved: true,
     }],
   });
 
-  await assert.rejects(releaseReservedInventory(order.products, order._id), /RESERVED_INVENTORY_TARGET_NOT_FOUND/);
+  t.mock.method(Order.prototype, "save", async () => { throw new Error("INJECTED_SAVE_FAILURE"); });
+  await assert.rejects(releaseReservedInventory(order.products, order._id), /INJECTED_SAVE_FAILURE/);
+  t.mock.restoreAll();
   const [currentProduct, currentOrder] = await Promise.all([
     Product.findById(product._id).lean(),
     Order.findById(order._id).lean(),

@@ -1,12 +1,67 @@
 import { redis } from "../lib/redis.js";
-import cloudinary from "../lib/cloudinary.js";
+import {
+  ImageStorageError,
+  ImageUploadError,
+  deleteManagedCloudinaryImage,
+  resolveManagedImageList,
+} from "../lib/image-upload.js";
 import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
 import Order from "../models/order.model.js";
-import { normalizePersianText, escapeSearchRegex } from "../lib/persian-search.js";
+import { normalizePersianText, escapeSearchRegex, buildNormalizedProductSearchText } from "../lib/persian-search.js";
+import { applyStockDelta, stockConflictError } from "../lib/inventory-stock.js";
 import { recordAuditEvent } from "../lib/audit-log.js";
 
 const idOf = (value) => value == null ? "" : String(value);
+const PRODUCT_IMAGE_FOLDER = "products";
+const MAX_PRODUCT_IMAGES = 8;
+const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+const productImageInputs = (images, image) => {
+  if (Array.isArray(images)) return images;
+  if (images !== undefined && images !== null) return images; // rejected by the resolver
+  return image ? [image] : [];
+};
+// SEC-13: deep offsets are expensive; public listings stop at this page.
+const MAX_PUBLIC_PAGE = 200;
+// SEC-10: never expose Mongo internals on public reads. Stock numbers stay
+// because the storefront cart/product UI relies on exact values (documented).
+const PUBLIC_PRODUCT_PROJECTION = "-__v";
+
+// SEC-16: free-form attributes (products without a category definition) are
+// stored as Mixed. Bound size, depth and key shape before storing them.
+const MAX_FREEFORM_ATTRIBUTES = 50;
+const sanitizeFreeformAttributes = (input) => {
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const entries = Object.entries(raw);
+  if (entries.length > MAX_FREEFORM_ATTRIBUTES) return { error: "تعداد ویژگی‌های محصول بیش از حد مجاز است." };
+  const values = {};
+  for (const [key, value] of entries) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(key)) return { error: "کلید ویژگی محصول معتبر نیست." };
+    if (typeof value === "string") {
+      if (value.length > 500) return { error: "مقدار ویژگی محصول بیش از حد طولانی است." };
+      values[key] = value;
+    } else if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
+      values[key] = value;
+    } else if (Array.isArray(value) && value.length <= 24 &&
+        value.every((entry) => typeof entry === "string" && entry.length <= 120)) {
+      values[key] = value;
+    } else if (value === null) {
+      continue;
+    } else {
+      return { error: "مقدار ویژگی محصول معتبر نیست." };
+    }
+  }
+  return { values };
+};
+const cleanupProductImages = async (urls, reason) => {
+  for (const url of new Set(urls.filter(Boolean))) {
+    try {
+      await deleteManagedCloudinaryImage(url, { folder: PRODUCT_IMAGE_FOLDER });
+    } catch (error) {
+      console.error("Product image cleanup failed (" + reason + ")", { name: error?.name || "Error" });
+    }
+  }
+};
 const getCategoryProductScope = async (slug) => {
   const selected = await Category.findOne({ slug }).lean();
   if (!selected) return null;
@@ -167,7 +222,7 @@ export const getAllProducts = async (req, res) => {
 
 export const getProductById = async (req, res) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isActive: { $ne: false } }).lean();
+    const product = await Product.findOne({ _id: req.params.id, isActive: { $ne: false } }).select(PUBLIC_PRODUCT_PROJECTION).lean();
     if (!product) return res.status(404).json({ message: "Product not found" });
     return res.json(product);
   } catch (error) {
@@ -182,7 +237,7 @@ export const getFeaturedProducts = async (_req, res) => {
   if (Array.isArray(cached)) return res.json(cached);
   try {
     const featuredProducts = await Product.find({ isFeatured: true, isActive: { $ne: false } })
-      .sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
+      .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
     await writeJsonCache("featured_products_v2", featuredProducts, 300);
     return res.json(featuredProducts);
   } catch (error) {
@@ -195,7 +250,7 @@ export const getNewestProducts = async (req, res) => {
   try {
     const limit = clampInteger(req.query.limit, 8, 1, 24);
     const products = await Product.find({ isActive: { $ne: false } })
-      .sort({ createdAt: -1, _id: -1 }).limit(limit).lean();
+      .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(limit).lean();
     return res.json({ products });
   } catch (error) {
     console.error("Error in getNewestProducts controller", error.message);
@@ -241,7 +296,7 @@ export const getSearchedProducts = async (req, res) => {
     const rawQuery = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 80) : "";
     const q = normalizePersianText(rawQuery).slice(0, 80);
     const category = typeof req.query.category === "string" ? req.query.category.trim().slice(0, 64) : "";
-    const page = clampInteger(req.query.page, 1, 1, 5000);
+    const page = clampInteger(req.query.page, 1, 1, MAX_PUBLIC_PAGE);
     const limit = clampInteger(req.query.limit, 24, 1, 48);
     const minPrice = req.query.minPrice === undefined || req.query.minPrice === "" ? null : Number(req.query.minPrice);
     const maxPrice = req.query.maxPrice === undefined || req.query.maxPrice === "" ? null : Number(req.query.maxPrice);
@@ -295,10 +350,13 @@ export const getSearchedProducts = async (req, res) => {
       priceDesc: { price: -1, _id: -1 },
       nameAsc: { name: 1, _id: 1 },
     };
-    const sort = sortMap[req.query.sort] || sortMap.newest;
+    // Own-property lookup: "__proto__", "constructor" etc. must not resolve.
+    const sort = typeof req.query.sort === "string" && Object.hasOwn(sortMap, req.query.sort)
+      ? sortMap[req.query.sort]
+      : sortMap.newest;
     const [total, products] = await Promise.all([
       Product.countDocuments(filter).maxTimeMS(1500),
-      Product.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
+      Product.find(filter).select(PUBLIC_PRODUCT_PROJECTION).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
     ]);
     return res.json({ products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
@@ -308,6 +366,7 @@ export const getSearchedProducts = async (req, res) => {
 };
 
 export const createProduct = async (req, res) => {
+  let pendingUploadedImages = [];
   try {
     const {
       name, description, price, image, images, category, categoryId, attributes, stock,
@@ -324,7 +383,7 @@ export const createProduct = async (req, res) => {
     const productCategory = categoryRecord ? categoryRecord.slug : (typeof category === "string" ? category.trim() : "");
     const normalizedAttributes = categoryRecord
       ? await validateProductAttributes(categoryRecord, attributes)
-      : { values: attributes && typeof attributes === "object" && !Array.isArray(attributes) ? attributes : {} };
+      : sanitizeFreeformAttributes(attributes);
     if (normalizedAttributes.error) return res.status(400).json({ message: normalizedAttributes.error });
     const numericPrice = price === "" || price === undefined || price === null ? Number.NaN : Number(price);
     const numericStock = stock === "" || stock === undefined || stock === null ? null : Number(stock);
@@ -402,18 +461,13 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Size measurements must be non-negative numbers" });
     }
 
-    const imageInputs = (Array.isArray(images) ? images : image ? [image] : [])
-      .filter((value) => typeof value === "string" && value.trim())
-      .slice(0, 8);
-    const uploadedImages = [];
-    for (const imageInput of imageInputs) {
-      if (/^https:\/\//i.test(imageInput)) {
-        uploadedImages.push(imageInput);
-      } else {
-        const response = await cloudinary.uploader.upload(imageInput, { folder: "products" });
-        if (response.secure_url) uploadedImages.push(response.secure_url);
-      }
-    }
+    const resolvedImages = await resolveManagedImageList(productImageInputs(images, image), {
+      folder: PRODUCT_IMAGE_FOLDER,
+      maxBytes: MAX_PRODUCT_IMAGE_BYTES,
+      maxCount: MAX_PRODUCT_IMAGES,
+    });
+    pendingUploadedImages = resolvedImages.uploaded;
+    const uploadedImages = resolvedImages.urls;
 
     const product = await Product.create({
       name: name.trim(),
@@ -431,6 +485,7 @@ export const createProduct = async (req, res) => {
       sizeChart: normalizedSizeChart,
       stock: normalizedVariants.length ? null : numericStock,
     });
+    pendingUploadedImages = [];
     await recordAuditEvent(req, {
       action: "product.created",
       targetType: "product",
@@ -460,14 +515,22 @@ export const createProduct = async (req, res) => {
     });
     return res.status(201).json(product);
   } catch (error) {
+    // Assets uploaded for a product that was never persisted must not leak.
+    if (pendingUploadedImages.length) await cleanupProductImages(pendingUploadedImages, "unpersisted create");
+    if (error instanceof ImageUploadError) return res.status(400).json({ message: error.message });
+    if (error instanceof ImageStorageError) return res.status(502).json({ message: error.message });
+    if (error?.name === "ValidationError" || error?.name === "CastError") {
+      return res.status(400).json({ message: "اطلاعات محصول معتبر نیست." });
+    }
     console.error("Error in createProduct controller", error.message);
     return res.status(500).json({ message: "Unable to create product" });
   }
 };
 
 export const updateProduct = async (req, res) => {
+  let pendingUploadedImages = [];
   try {
-    const product = await Product.findById(req.params.id);
+    let product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     const body = req.body || {};
@@ -488,7 +551,7 @@ export const updateProduct = async (req, res) => {
     const rawAttributes = body.attributes && typeof body.attributes === "object" && !Array.isArray(body.attributes) ? body.attributes : {};
     const normalizedAttributes = categoryRecord
       ? await validateProductAttributes(categoryRecord, rawAttributes)
-      : { values: rawAttributes };
+      : sanitizeFreeformAttributes(rawAttributes);
     if (normalizedAttributes.error) return res.status(400).json({ message: normalizedAttributes.error });
 
     const normalizedSizes = Array.isArray(body.sizes)
@@ -562,20 +625,19 @@ export const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "اندازه‌های جدول سایز باید عددی نامنفی باشند." });
     }
 
-    const imageInputs = (Array.isArray(body.images) ? body.images : (body.image ? [body.image] : []))
-      .filter((value) => typeof value === "string" && value.trim()).slice(0, 8);
-    if ((Array.isArray(body.images) && body.images.length > 8) ||
-        imageInputs.some((value) => !/^https:\/\//i.test(value) && !/^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(value))) {
-      return res.status(400).json({ message: "فرمت تصاویر محصول معتبر نیست." });
-    }
-    const uploadedImages = [];
-    for (const imageInput of imageInputs) {
-      if (/^https:\/\//i.test(imageInput)) {
-        uploadedImages.push(imageInput);
-      } else {
-        const response = await cloudinary.uploader.upload(imageInput, { folder: "products" });
-        if (response.secure_url) uploadedImages.push(response.secure_url);
-      }
+    const previousImages = [product.image, ...(product.images || [])].filter(Boolean);
+    // Omitting both fields keeps the current gallery instead of wiping it.
+    const imagesProvided = body.images !== undefined || body.image !== undefined;
+    let uploadedImages = [...new Set(previousImages)];
+    if (imagesProvided) {
+      const resolvedImages = await resolveManagedImageList(productImageInputs(body.images, body.image), {
+        folder: PRODUCT_IMAGE_FOLDER,
+        maxBytes: MAX_PRODUCT_IMAGE_BYTES,
+        maxCount: MAX_PRODUCT_IMAGES,
+        existing: previousImages,
+      });
+      pendingUploadedImages = resolvedImages.uploaded;
+      uploadedImages = resolvedImages.urls;
     }
 
     const snapshot = (item) => ({
@@ -597,21 +659,73 @@ export const updateProduct = async (req, res) => {
     });
     const before = snapshot(product);
 
-    product.name = name;
-    product.description = description;
-    product.price = numericPrice;
-    product.image = uploadedImages[0] || "";
-    product.images = uploadedImages;
-    product.category = productCategory;
-    product.categoryId = categoryRecord?._id || null;
-    product.attributes = normalizedAttributes.values || {};
-    product.sizes = normalizedSizes;
-    product.colors = normalizedColors;
-    product.variants = normalizedVariants;
-    product.fit = normalizedFit;
-    product.sizeChart = normalizedSizeChart;
-    product.stock = normalizedVariants.length ? null : numericStock;
-    await product.save();
+    // Stock is applied as a delta against the live document and written with a
+    // conditional filter, so a reservation made while the admin was editing (or between
+    // our read and write) is never erased (BIZ-5). The baseline is what the admin saw:
+    // an explicit stockBaseline / variants[].stockBaseline from the form, else the value
+    // read at the start of this request.
+    const explicitNumber = (value) => (value === "" || value === null || value === undefined || !Number.isSafeInteger(Number(value))) ? null : Number(value);
+    const firstRead = product.toObject();
+    const variantKey = (variant) => (variant.size || "") + "::" + (variant.color || "");
+    const firstVariantStock = new Map((firstRead.variants || []).map((variant) => [variantKey(variant), variant.stock]));
+    const explicitVariantBaseline = new Map();
+    (Array.isArray(body.variants) ? body.variants : []).forEach((variant, index) => {
+      const baseline = explicitNumber(variant?.stockBaseline);
+      if (baseline !== null && normalizedVariants[index]) explicitVariantBaseline.set(variantKey(normalizedVariants[index]), baseline);
+    });
+    const explicitStockBaseline = explicitNumber(body.stockBaseline);
+    const searchSource = {
+      name, description, category: productCategory, sizes: normalizedSizes, colors: normalizedColors,
+      fit: normalizedFit, attributes: normalizedAttributes.values || {},
+    };
+
+    let saved = null;
+    for (let attempt = 0; attempt < 6 && !saved; attempt += 1) {
+      const live = attempt === 0 ? firstRead : await Product.findById(product._id).lean();
+      if (!live) return res.status(404).json({ message: "Product not found" });
+      const liveVariants = live.variants || [];
+      const nextVariants = normalizedVariants.map((variant) => {
+        const key = variantKey(variant);
+        const liveVariant = liveVariants.find((entry) => variantKey(entry) === key);
+        const baseline = explicitVariantBaseline.get(key) ?? firstVariantStock.get(key);
+        const stock = liveVariant ? applyStockDelta(liveVariant.stock, baseline, variant.stock) : variant.stock;
+        return { size: variant.size, color: variant.color, stock };
+      });
+      let nextStock = null;
+      if (!normalizedVariants.length && numericStock !== null) {
+        nextStock = applyStockDelta(live.stock, explicitStockBaseline ?? firstRead.stock, numericStock);
+      }
+      if (nextVariants.some((variant) => variant.stock < 0) || (nextStock !== null && nextStock < 0)) {
+        throw stockConflictError("STOCK_BELOW_RESERVED");
+      }
+      const filter = { _id: product._id, stock: live.stock ?? null };
+      if (liveVariants.length) filter.variants = liveVariants;
+      else filter.$or = [{ variants: { $exists: false } }, { variants: { $size: 0 } }];
+      saved = await Product.findOneAndUpdate(filter, {
+        $set: {
+          name,
+          description,
+          price: numericPrice,
+          image: uploadedImages[0] || "",
+          images: uploadedImages,
+          category: productCategory,
+          categoryId: categoryRecord?._id || null,
+          attributes: normalizedAttributes.values || {},
+          sizes: normalizedSizes,
+          colors: normalizedColors,
+          variants: nextVariants,
+          fit: normalizedFit,
+          sizeChart: normalizedSizeChart,
+          stock: nextStock,
+          searchTextNormalized: buildNormalizedProductSearchText({ ...searchSource, variants: nextVariants }),
+        },
+      }, { new: true, runValidators: true });
+    }
+    if (!saved) throw stockConflictError("STOCK_CONFLICT");
+    product = saved;
+    pendingUploadedImages = [];
+    // Images dropped from the gallery are removed from media storage.
+    await cleanupProductImages(previousImages.filter((url) => !uploadedImages.includes(url)), "replaced image");
 
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
@@ -623,7 +737,16 @@ export const updateProduct = async (req, res) => {
     });
     return res.json(product);
   } catch (error) {
+    if (pendingUploadedImages.length) await cleanupProductImages(pendingUploadedImages, "unpersisted update");
+    if (error instanceof ImageUploadError) return res.status(400).json({ message: error.message });
+    if (error instanceof ImageStorageError) return res.status(502).json({ message: error.message });
     if (error.name === "CastError") return res.status(400).json({ message: "شناسه محصول معتبر نیست." });
+    if (error.code === "STOCK_BELOW_RESERVED") {
+      return res.status(409).json({ message: "موجودی جدید کمتر از تعداد رزرو یا فروخته‌شده است؛ صفحه را تازه‌سازی و دوباره تلاش کنید." });
+    }
+    if (error.code === "STOCK_CONFLICT") {
+      return res.status(409).json({ message: "موجودی هم‌زمان تغییر کرد؛ صفحه را تازه‌سازی و دوباره تلاش کنید." });
+    }
     console.error("Error updating product", error.message);
     return res.status(500).json({ message: "به‌روزرسانی محصول ناموفق بود." });
   }
@@ -668,12 +791,26 @@ export const updateProductStock = async (req, res) => {
   try {
     const beforeProduct = await Product.findById(req.params.id).select("name category stock").lean();
     if (!beforeProduct) return res.status(404).json({ message: "Product not found" });
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { $set: { stock } },
-      { new: true, runValidators: true }
-    ).select("_id stock");
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    // "Set stock to N" is applied as a delta from what the admin saw, so reservations made
+    // since then survive. expectedStock (optional) is the value shown in the admin's form.
+    const expected = req.body.expectedStock === undefined || req.body.expectedStock === null || req.body.expectedStock === ""
+      ? beforeProduct.stock : Number(req.body.expectedStock);
+    let product;
+    if (Number.isSafeInteger(expected) && Number.isSafeInteger(beforeProduct.stock)) {
+      const delta = stock - expected;
+      product = await Product.findOneAndUpdate(
+        { _id: req.params.id, stock: { $type: "number", $gte: Math.max(0, -delta) } },
+        { $inc: { stock: delta } },
+        { new: true, runValidators: true }
+      ).select("_id stock");
+    } else {
+      product = await Product.findOneAndUpdate(
+        { _id: req.params.id, stock: beforeProduct.stock ?? null },
+        { $set: { stock } },
+        { new: true, runValidators: true }
+      ).select("_id stock");
+    }
+    if (!product) return res.status(409).json({ message: "Stock changed concurrently or would drop below reserved units; reload and retry" });
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
       action: "product.stock_updated",
@@ -712,12 +849,22 @@ export const updateProductVariantStock = async (req, res) => {
     }).select("name category variants").lean();
     if (!beforeProduct) return res.status(404).json({ message: "Product variant not found" });
     const beforeVariant = (beforeProduct.variants || []).find((variant) => variant.size === size && variant.color === color);
-    const product = await Product.findOneAndUpdate(
-      { _id: req.params.id, variants: { $elemMatch: { size, color } } },
-      { $set: { "variants.$.stock": stock } },
-      { new: true, runValidators: true }
-    ).select("_id variants");
-    if (!product) return res.status(404).json({ message: "Product variant not found" });
+    // Delta from what the admin saw (optional expectedStock) so concurrent reservations survive.
+    const expected = req.body.expectedStock === undefined || req.body.expectedStock === null || req.body.expectedStock === ""
+      ? beforeVariant?.stock : Number(req.body.expectedStock);
+    const delta = Number.isSafeInteger(expected) ? stock - expected : null;
+    const product = delta === null
+      ? await Product.findOneAndUpdate(
+          { _id: req.params.id, variants: { $elemMatch: { size, color, stock: beforeVariant?.stock } } },
+          { $set: { "variants.$.stock": stock } },
+          { new: true, runValidators: true }
+        ).select("_id variants")
+      : await Product.findOneAndUpdate(
+          { _id: req.params.id, variants: { $elemMatch: { size, color, stock: { $gte: Math.max(0, -delta) } } } },
+          { $inc: { "variants.$.stock": delta } },
+          { new: true, runValidators: true }
+        ).select("_id variants");
+    if (!product) return res.status(409).json({ message: "Variant stock changed concurrently or would drop below reserved units; reload and retry" });
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
       action: "product.variant_stock_updated",
@@ -747,15 +894,8 @@ export const deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (product.isActive !== false) return res.status(409).json({ message: "ابتدا محصول را بایگانی کنید و سپس حذف دائمی را انجام دهید." });
-    if (product.image) {
-      try {
-        const publicId = product.image.split("/").pop().split(".")[0];
-        await cloudinary.uploader.destroy(`products/${publicId}`);
-      } catch (error) {
-        console.error("Error deleting product image", error.message);
-      }
-    }
     await Product.findByIdAndDelete(req.params.id);
+    await cleanupProductImages([product.image, ...(product.images || [])], "deleted product");
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
       action: "product.deleted",
@@ -823,7 +963,12 @@ export const getProductsByCategory = async (req, res) => {
         ],
       });
     } else {
-      // Preserve access to legacy category slugs during and after migration.
+      // Preserve access to legacy category slugs during and after migration,
+      // but only for slugs that actually have catalogue products (SEC-8): an
+      // unknown slug is a cheap 404 and never reaches the facet aggregation
+      // or the Redis cache, so random slugs cannot create cache keys.
+      const legacyMatch = await Product.exists({ category: slug, isActive: { $ne: false } });
+      if (!legacyMatch) return res.status(404).json({ message: "دسته‌بندی پیدا نشد." });
       baseClauses.push({ category: slug });
     }
 
@@ -945,7 +1090,7 @@ export const getProductsByCategory = async (req, res) => {
     }
 
     const filter = { $and: clauses };
-    const page = clampInteger(req.query.page, 1, 1, 100000);
+    const page = clampInteger(req.query.page, 1, 1, MAX_PUBLIC_PAGE);
     const limit = clampInteger(req.query.limit, 24, 1, 60);
     const offset = (page - 1) * limit;
     const countOnly = ["1", "true"].includes(String(req.query.countOnly || "").toLowerCase());
@@ -1035,7 +1180,7 @@ export const getProductsByCategory = async (req, res) => {
     }
 
     const [products, total, priceStats] = await Promise.all([
-      Product.find(filter).sort(sort).skip(offset).limit(limit).maxTimeMS(1500).lean(),
+      Product.find(filter).select(PUBLIC_PRODUCT_PROJECTION).sort(sort).skip(offset).limit(limit).maxTimeMS(1500).lean(),
       Product.countDocuments(filter).maxTimeMS(1500),
       Product.aggregate([
         { $match: { $and: baseClauses } },
@@ -1092,7 +1237,7 @@ export const toggleFeaturedProduct = async (req, res) => {
 async function updateFeaturedProductsCache() {
   try {
     const products = await Product.find({ isFeatured: true, isActive: { $ne: false } })
-      .sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
+      .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
     await writeJsonCache("featured_products_v2", products, 300);
   } catch (error) {
     console.error("Unable to refresh featured-products cache", error.message);
@@ -1102,7 +1247,7 @@ async function updateFeaturedProductsCache() {
 
 export const getBestsellingProducts = async (req, res) => {
   const limit = clampInteger(req.query.limit, 8, 1, 24);
-  const cacheKey = `bestselling_products_v1:${limit}`;
+  const cacheKey = `bestselling_products_v2:${limit}`;
   const cached = await readJsonCache(cacheKey);
   if (Array.isArray(cached)) return res.json({ products: cached });
   try {
@@ -1125,12 +1270,9 @@ export const getBestsellingProducts = async (req, res) => {
       { $match: { "product.isActive": { $ne: false } } },
       { $sort: { soldQuantity: -1, orderCount: -1, _id: 1 } },
       { $limit: limit },
-      { $replaceRoot: { newRoot: {
-        $mergeObjects: [
-          "$product",
-          { soldQuantity: "$soldQuantity", orderCount: "$orderCount" },
-        ],
-      } } },
+      // SEC-10: sales volume is used for ranking only and must not be exposed.
+      { $replaceRoot: { newRoot: "$product" } },
+      { $project: { __v: 0, searchTextNormalized: 0 } },
     ]).option({ maxTimeMS: 2500 });
     await writeJsonCache(cacheKey, products, 60);
     return res.json({ products });

@@ -170,7 +170,7 @@ export const useProductStore = create((set) => ({
   fetchFeaturedProducts: async () => {
     try {
       const response = await axios.get("/products/featured");
-      set({ featuredProducts: response.data || [] });
+      set({ featuredProducts: Array.isArray(response.data) ? response.data : [] });
     } catch (error) {
       console.error("Error fetching featured products:", error.message);
     }
