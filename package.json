@@ -1,7 +1,7 @@
 {
-  "name": "e-commerce-store",
+  "name": "miba-store",
   "version": "1.0.0",
-  "description": "",
+  "description": "MIBA — Persian RTL store for Chinese automotive spare parts (retail and wholesale)",
   "main": "backend/server.js",
   "scripts": {
     "dev": "nodemon backend/server.js",
@@ -10,7 +10,8 @@
     "test": "npm test --prefix backend",
     "audit:inventory": "node scripts/audit-untracked-inventory.mjs",
     "start:all": "node scripts/start-all.mjs",
-    "dev:all": "node scripts/dev-all.mjs"
+    "dev:all": "node scripts/dev-all.mjs",
+    "seed": "node scripts/seed-miba.mjs"
   },
   "keywords": [],
   "author": "",

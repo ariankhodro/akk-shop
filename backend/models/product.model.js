@@ -48,11 +48,44 @@ const fitSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Vehicle fitment: which cars a part fits. Make/model are free text so the
+// catalogue can follow the market (Chery, JAC, MVM, Haval, Geely, ...).
+export const PART_QUALITIES = Object.freeze(["genuine", "oem", "aftermarket", "used"]);
+const fitmentSchema = new mongoose.Schema(
+  {
+    make: { type: String, required: true, trim: true, maxlength: 60 },
+    model: { type: String, trim: true, maxlength: 80, default: "" },
+    yearFrom: { type: Number, min: 1950, max: 2100, default: null },
+    yearTo: { type: Number, min: 1950, max: 2100, default: null },
+    engine: { type: String, trim: true, maxlength: 80, default: "" },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 160 },
     description: { type: String, required: true, maxlength: 5000 },
     price: { type: Number, min: 0, required: true },
+    // Wholesale price is confidential: never selected unless a query asks for
+    // it explicitly (see lib/pricing.js). null = no wholesale price for this part.
+    wholesalePrice: {
+      type: Number,
+      min: 0,
+      default: null,
+      select: false,
+      validate: { validator: (value) => value === null || Number.isSafeInteger(value), message: "Wholesale price must be a whole Toman amount" },
+    },
+    // Wholesale price applies from this quantity per order line.
+    wholesaleMinQuantity: { type: Number, min: 1, max: 1000, default: 1, select: false },
+    // Automotive part identity.
+    sku: { type: String, trim: true, maxlength: 64, default: "" },
+    oemNumbers: { type: [{ type: String, trim: true, maxlength: 64 }], default: [] },
+    brand: { type: String, trim: true, maxlength: 80, default: "" },
+    quality: { type: String, enum: [...PART_QUALITIES, ""], default: "" },
+    countryOfOrigin: { type: String, trim: true, maxlength: 60, default: "" },
+    warrantyMonths: { type: Number, min: 0, max: 120, default: 0 },
+    fitments: { type: [fitmentSchema], default: [] },
     image: { type: String, trim: true, default: "" },
     // Keep image for existing integrations while allowing a proper product gallery.
     images: { type: [String], default: [] },
@@ -84,6 +117,10 @@ productSchema.index({ createdAt: -1 });
 productSchema.index({ category: 1, price: 1, createdAt: -1 });
 productSchema.index({ isActive: 1, category: 1, createdAt: -1, _id: -1 });
 productSchema.index({ isActive: 1, isFeatured: 1, createdAt: -1, _id: -1 });
+productSchema.index({ sku: 1 }, { unique: true, partialFilterExpression: { sku: { $type: "string", $gt: "" } } });
+productSchema.index({ oemNumbers: 1 });
+productSchema.index({ isActive: 1, "fitments.make": 1, "fitments.model": 1 });
+productSchema.index({ isActive: 1, brand: 1 });
 
 productSchema.pre("validate", function () {
   this.searchTextNormalized = buildNormalizedProductSearchText({
@@ -95,6 +132,10 @@ productSchema.pre("validate", function () {
     variants: this.variants,
     fit: this.fit,
     attributes: this.attributes,
+    sku: this.sku,
+    oemNumbers: this.oemNumbers,
+    brand: this.brand,
+    fitments: this.fitments,
   });
 });
 

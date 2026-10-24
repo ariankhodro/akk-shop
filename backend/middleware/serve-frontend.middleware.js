@@ -37,7 +37,14 @@ export const createFrontendServer = async () => {
   router.use(files);
   router.use((req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
-    const requested = path.join(FRONTEND_DIST, decodeURIComponent(req.path));
+    let decodedPath;
+    try {
+      decodedPath = decodeURIComponent(req.path);
+    } catch {
+      return res.status(400).type("text/plain").send("Bad request");
+    }
+    const requested = path.join(FRONTEND_DIST, decodedPath);
+    if (!requested.startsWith(FRONTEND_DIST + path.sep)) return res.status(400).type("text/plain").send("Bad request");
     if (path.extname(req.path) && !(existsSync(requested) && statSync(requested).isFile())) return next();
     res.setHeader("Cache-Control", "no-cache");
     return res.sendFile(path.join(FRONTEND_DIST, "index.html"));

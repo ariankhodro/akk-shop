@@ -102,9 +102,15 @@ export const getCustomers = async (req, res) => {
       filter.$or = [{ name: new RegExp(safe, "i") }, { email: new RegExp(safe, "i") }];
     }
     if (["customer", "admin"].includes(req.query.role)) filter.role = req.query.role;
+    if (["retail", "wholesale"].includes(req.query.accountType)) {
+      filter.accountType = req.query.accountType === "retail" ? { $ne: "wholesale" } : "wholesale";
+    }
+    if (search) filter.$or.push({ "wholesaleProfile.companyName": new RegExp(escapeSearchRegex(search), "i") });
     // Permission lists and owner flags are only visible to access managers.
     const canSeeAccess = hasPermission(req.user, "roles.manage");
-    const projection = "_id name email role isActive createdAt" + (canSeeAccess ? " permissions adminRole isOwner" : "");
+    const canManageWholesale = hasPermission(req.user, "wholesale.manage");
+    const projection = "_id name email role isActive createdAt accountType mustChangePassword" +
+      (canSeeAccess ? " permissions adminRole isOwner" : "") + (canManageWholesale ? " wholesaleProfile" : " wholesaleProfile.companyName");
     const [customers, total] = await Promise.all([
       User.find(filter).select(projection).sort({ createdAt: -1, _id: -1 })
         .skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
@@ -114,10 +120,10 @@ export const getCustomers = async (req, res) => {
     await recordAuditEvent(req, {
       action: "customers.listed", targetType: "user", targetId: "",
       summary: "Customer account list viewed",
-      metadata: { page, limit, returned: customers.length, searched: Boolean(search), roleFilter: filter.role || null },
+      metadata: { page, limit, returned: customers.length, searched: Boolean(search), roleFilter: filter.role || null, accountTypeFilter: ["retail", "wholesale"].includes(req.query.accountType) ? req.query.accountType : null },
     });
     return res.json({
-      customers, canManageAccess: canSeeAccess,
+      customers, canManageAccess: canSeeAccess, canManageWholesale,
       rolePresets: canSeeAccess ? ROLE_PRESET_NAMES : undefined,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });

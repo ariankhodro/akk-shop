@@ -164,6 +164,9 @@ export const forgotPasswordRateLimit = createRateLimiter({
 export const resetPasswordRateLimit = createRateLimiter({
   name: "auth-reset", limit: 10, windowSeconds: 900, failMode: FAIL_MODE.CLOSED, message: authMessage,
 });
+export const changePasswordRateLimit = createRateLimiter({
+  name: "auth-change-password", limit: 10, windowSeconds: 900, failMode: FAIL_MODE.CLOSED, message: authMessage,
+});
 export const refreshTokenRateLimit = createRateLimiter({
   name: "refresh-token", limit: 60, windowSeconds: 60, failMode: FAIL_MODE.CLOSED,
 });

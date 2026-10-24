@@ -9,7 +9,22 @@ const categoryAliases = {
   jackets: "کت و کاپشن",
   suits: "کت و شلوار",
   bags: "کیف",
+  engine: "موتور قطعات موتوری",
+  brakes: "ترمز لنت دیسک",
+  suspension: "جلوبندی تعلیق کمک فنر",
+  electrical: "برق خودرو الکتریکی",
+  filters: "فیلتر روغن هوا بنزین کابین",
+  body: "بدنه چراغ آینه سپر",
+  transmission: "گیربکس انتقال قدرت کلاچ",
+  cooling: "خنک کاری رادیاتور واترپمپ",
 };
+
+// Part numbers are matched with and without separators: "A11-1109111" and
+// "a111109111" must find the same product.
+export const compactPartNumber = (value) =>
+  String(value ?? "").normalize("NFKC").replace(/[۰-۹]/g, (digit) => String(persianDigitMap.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String(arabicDigitMap.indexOf(digit)))
+    .toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export const normalizePersianText = (value) =>
   String(value ?? "")
@@ -45,6 +60,11 @@ export const buildNormalizedProductSearchText = (product) => {
     ...(Array.isArray(product?.variants) ? product.variants.flatMap((item) => [item?.size, item?.color]) : []),
     product?.fit?.type,
     ...attributeText,
+    product?.brand,
+    product?.sku,
+    compactPartNumber(product?.sku),
+    ...(Array.isArray(product?.oemNumbers) ? product.oemNumbers.flatMap((value) => [value, compactPartNumber(value)]) : []),
+    ...(Array.isArray(product?.fitments) ? product.fitments.flatMap((item) => [item?.make, item?.model, item?.engine]) : []),
   ];
   return normalizePersianText([
     product?.name,

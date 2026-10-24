@@ -40,8 +40,9 @@ test("CSP is restrictive and only allows the hosts the storefront needs", () => 
   assert.ok(csp["img-src"].includes("https://res.cloudinary.com"));
   assert.ok(!csp["img-src"].includes("https:") && !csp["img-src"].includes("*"));
   assert.deepEqual(csp["connect-src"], ["'self'"]);
-  assert.ok(csp["style-src"].includes("https://fonts.googleapis.com"));
-  assert.ok(csp["font-src"].includes("https://fonts.gstatic.com"));
+  // Fonts are self-hosted: no third-party style or font origins.
+  assert.ok(!csp["style-src"].some((source) => source.startsWith("https:")));
+  assert.ok(!csp["font-src"].some((source) => source.startsWith("https:")));
 });
 
 test("frontend/index.html contains no inline executable script", () => {

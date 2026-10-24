@@ -89,6 +89,26 @@ const userSchema = new mongoose.Schema(
     // Incremented to revoke every outstanding access and refresh token.
     tokenVersion: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    // Retail accounts are self-registered. Wholesale accounts are created and
+    // managed only by administrators (there is no public wholesale signup).
+    accountType: { type: String, enum: ["retail", "wholesale"], default: "retail" },
+    wholesaleProfile: {
+      type: new mongoose.Schema({
+        companyName: { type: String, trim: true, maxlength: 120, default: "" },
+        contactPhone: { type: String, trim: true, maxlength: 20, default: "" },
+        // Iranian national ID / economic code of the business (digits only).
+        taxId: { type: String, trim: true, maxlength: 16, default: "" },
+        city: { type: String, trim: true, maxlength: 80, default: "" },
+        // Extra customer-specific discount applied on top of wholesale prices.
+        discountPercent: { type: Number, min: 0, max: 50, default: 0 },
+        notes: { type: String, trim: true, maxlength: 500, default: "" },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      }, { _id: false }),
+      default: undefined,
+    },
+    // Set when an administrator issues a temporary password; the account
+    // holder is asked to choose a new one after signing in.
+    mustChangePassword: { type: Boolean, default: false },
 	},
 	{
 		timestamps: true,

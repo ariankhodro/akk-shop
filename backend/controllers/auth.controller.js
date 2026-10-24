@@ -142,7 +142,10 @@ export const login = async (req, res) => {
 		setCookies(res, accessToken, refreshToken);
 		await resetRateLimit({ name: "login-fail-account-ip", keyParts: accountIpKey });
 
-		return res.json({ _id: user._id, name: user.name, email: user.email, role: user.role });
+		return res.json({
+			_id: user._id, name: user.name, email: user.email, role: user.role,
+			accountType: user.accountType || "retail", mustChangePassword: user.mustChangePassword === true,
+		});
 	} catch (error) {
 		if (error instanceof RateLimitUnavailableError) return sendRateLimitUnavailable(res);
 		console.error("Login failed", { name: error?.name, message: error?.message });
@@ -456,6 +459,7 @@ export const resetPassword = async (req, res) => {
     // cannot leave old refresh tokens valid next to a changed password.
     await revokeRefreshSession(redis, user._id);
     user.password = password;
+    user.mustChangePassword = false;
     user.tokenVersion = tokenVersionOf(user) + 1;
     user.passwordResetTokenHash = undefined;
     user.passwordResetExpiresAt = undefined;
@@ -567,5 +571,38 @@ export const getProfile = async (req, res) => {
  } catch (error) {
   console.error("Loading customer profile failed", error.message);
   return res.status(500).json({ message: "دریافت اطلاعات پروفایل ناموفق بود." });
+ }
+};
+
+// Signed-in password change (required after an administrator issues a
+// temporary password). Every other session is revoked; this one gets fresh tokens.
+export const changePassword = async (req, res) => {
+ const body = isPlainObject(req.body) ? req.body : {};
+ const currentPassword = readPassword(body.currentPassword);
+ const newPassword = readPassword(body.newPassword);
+ if (currentPassword === null) return res.status(400).json({ message: "رمز عبور فعلی را وارد کنید.", fieldErrors: { currentPassword: "رمز عبور فعلی را وارد کنید." } });
+ const policyError = newPassword === null ? "رمز عبور جدید را وارد کنید." : getPasswordPolicyError(newPassword);
+ if (policyError) return res.status(400).json({ message: policyError, fieldErrors: { newPassword: policyError } });
+ if (newPassword === currentPassword) {
+  return res.status(400).json({ message: "رمز عبور جدید باید با رمز فعلی متفاوت باشد.", fieldErrors: { newPassword: "رمز عبور جدید باید با رمز فعلی متفاوت باشد." } });
+ }
+ try {
+  const user = await User.findById(req.user._id);
+  if (!user || user.isActive === false) return res.status(401).json({ message: "Authentication required" });
+  if (!(await user.comparePassword(currentPassword))) {
+   return res.status(400).json({ message: "رمز عبور فعلی درست نیست.", fieldErrors: { currentPassword: "رمز عبور فعلی درست نیست." } });
+  }
+  await revokeRefreshSession(redis, user._id);
+  user.password = newPassword;
+  user.mustChangePassword = false;
+  user.tokenVersion = tokenVersionOf(user) + 1;
+  await user.save();
+  const { accessToken, refreshToken } = generateTokens(user);
+  await storeRefreshSession(redis, user._id, refreshToken);
+  setCookies(res, accessToken, refreshToken);
+  return res.json({ message: "رمز عبور با موفقیت تغییر کرد." });
+ } catch (error) {
+  console.error("Password change failed", { name: error?.name, message: error?.message });
+  return res.status(500).json({ message: "تغییر رمز عبور ناموفق بود." });
  }
 };

@@ -30,14 +30,14 @@ const send = async (email, subject, html) => {
 const wrap = (body) => '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">' + body + "</div>";
 
 export const sendNewsletterConfirmationEmail = (email, token) =>
-  send(email, "تأیید عضویت در خبرنامه تیک بوتیک", wrap(
+  send(email, "تأیید عضویت در خبرنامه میبا", wrap(
     "<p>برای فعال‌شدن عضویت در خبرنامه، روی پیوند زیر بزنید و عضویت را تأیید کنید.</p>" +
     '<p><a href="' + linkFor("/api/newsletter/confirm", token) + '">تأیید عضویت</a></p>' +
     "<p>این پیوند ۳ روز اعتبار دارد. اگر این درخواست از طرف شما نبوده است، این ایمیل را نادیده بگیرید؛ بدون تأیید شما هیچ خبرنامه‌ای ارسال نمی‌شود.</p>"
   ));
 
 export const sendNewsletterUnsubscribeEmail = (email, token) =>
-  send(email, "لغو عضویت خبرنامه تیک بوتیک", wrap(
+  send(email, "لغو عضویت خبرنامه میبا", wrap(
     "<p>برای لغو عضویت در خبرنامه روی پیوند زیر بزنید.</p>" +
     '<p><a href="' + linkFor("/api/newsletter/unsubscribe", token) + '">لغو عضویت</a></p>' +
     "<p>اگر این درخواست از طرف شما نبوده است، این ایمیل را نادیده بگیرید.</p>"

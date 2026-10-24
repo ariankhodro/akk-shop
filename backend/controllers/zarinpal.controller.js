@@ -29,6 +29,9 @@ import {
 } from "../lib/payment-reconciliation.js";
 import { acquireMongoLease, releaseMongoLease } from "../lib/reconciliation-lease.js";
 import { classifyRequestResponse, classifyVerifyResponse } from "../lib/zarinpal-codes.js";
+import {
+  WHOLESALE_FIELDS, WHOLESALE_MAX_LINE_QUANTITY, isWholesaleViewer, maxLineQuantityFor, unitPriceFor,
+} from "../lib/pricing.js";
 
 // Tests replace these to mock the provider and the clock.
 export const zarinpalDeps = {
@@ -255,7 +258,10 @@ const finalizePaidOrder = async (paidOrder) => {
   }
 };
 
-export const reserveInventory = async (items, productsById, { session } = {}) => {
+// `unitPrice(product, quantity)` decides what each order line is charged; it
+// defaults to the retail price. The retail price is still part of every
+// conditional write, so a concurrent catalogue price edit aborts the reservation.
+export const reserveInventory = async (items, productsById, { session, unitPrice = (product) => product.price } = {}) => {
   const reserved = [];
   const orderItems = [];
   try {
@@ -265,9 +271,11 @@ export const reserveInventory = async (items, productsById, { session } = {}) =>
       const quantity = Number(item.quantity);
       const size = optionValue(item.size);
       const color = optionValue(item.color);
-      if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > 100 || product.isActive === false) {
+      if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > WHOLESALE_MAX_LINE_QUANTITY || product.isActive === false) {
         throw new Error("INVALID_CART");
       }
+      const linePrice = unitPrice(product, quantity);
+      if (!Number.isSafeInteger(linePrice) || linePrice < 0) throw new Error("INVALID_CART");
       if (!hasConfiguredInventory(product)) throw new Error("UNTRACKED_INVENTORY");
 
       const hasVariant = (product.variants || []).length > 0;
@@ -288,7 +296,7 @@ export const reserveInventory = async (items, productsById, { session } = {}) =>
         ).lean();
         if (!updated) throw new Error("INSUFFICIENT_STOCK");
         reserved.push({ product: product._id, quantity, size, color, hasVariant: true, stockReserved: true });
-        orderItems.push({ product: product._id, quantity, price: product.price, size, color, productName: product.name, image: product.image || "", hasVariant: true, stockReserved: true });
+        orderItems.push({ product: product._id, quantity, price: linePrice, retailPrice: product.price, size, color, productName: product.name, sku: product.sku || "", image: product.image || "", hasVariant: true, stockReserved: true });
       } else if (isTracked(product)) {
         const updated = await Product.findOneAndUpdate(
           { _id: product._id, isActive: { $ne: false }, price: product.price, stock: { $gte: quantity } },
@@ -297,7 +305,7 @@ export const reserveInventory = async (items, productsById, { session } = {}) =>
         ).lean();
         if (!updated) throw new Error("INSUFFICIENT_STOCK");
         reserved.push({ product: product._id, quantity, hasVariant: false, stockReserved: true });
-        orderItems.push({ product: product._id, quantity, price: product.price, size, color, productName: product.name, image: product.image || "", hasVariant: false, stockReserved: true });
+        orderItems.push({ product: product._id, quantity, price: linePrice, retailPrice: product.price, size, color, productName: product.name, sku: product.sku || "", image: product.image || "", hasVariant: false, stockReserved: true });
       } else {
         // Defense in depth: unknown inventory is not an unlimited-stock policy.
         throw new Error("UNTRACKED_INVENTORY");
@@ -335,8 +343,13 @@ export const createZarinpalCheckout = async (req, res) => {
     const cartItems = req.user.cartItems || [];
     if (!cartItems.length) return res.status(400).json({ message: "سبد خرید خالی است" });
 
+    // Pricing tier is decided once, from the account as loaded by protectRoute.
+    const wholesaleBuyer = isWholesaleViewer(req.user);
+    const lineLimit = maxLineQuantityFor(req.user);
+    const priceLine = (product, quantity) => unitPriceFor(product, req.user, quantity);
     const productIds = cartItems.map(cartProductId).filter(Boolean);
-    const products = await Product.find({ _id: { $in: productIds }, isActive: { $ne: false } }).lean();
+    const productQuery = Product.find({ _id: { $in: productIds }, isActive: { $ne: false } });
+    const products = await (wholesaleBuyer ? productQuery.select(WHOLESALE_FIELDS) : productQuery).lean();
     const productsById = new Map(products.map((product) => [product._id.toString(), product]));
     const validated = cartItems.map((item) => {
       const id = cartProductId(item);
@@ -344,7 +357,7 @@ export const createZarinpalCheckout = async (req, res) => {
       const quantity = Number(item.quantity);
       const size = optionValue(item.size);
       const color = optionValue(item.color);
-      if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > 100 ||
+      if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > lineLimit ||
           !Number.isSafeInteger(product.price) || product.price < 0) return null;
       if (!hasConfiguredInventory(product)) return null;
       const hasVariant = (product.variants || []).length > 0;
@@ -361,6 +374,10 @@ export const createZarinpalCheckout = async (req, res) => {
     }
 
     const couponCode = typeof req.body.couponCode === "string" ? req.body.couponCode.trim().toUpperCase() : "";
+    // Wholesale prices are already negotiated terms; coupons do not stack on them.
+    if (couponCode && wholesaleBuyer) {
+      return res.status(400).json({ message: "کد تخفیف برای خرید عمده قابل استفاده نیست." });
+    }
     let coupon = null;
     let couponDiscountAmount = 0;
     let shippingFee = 0;
@@ -378,6 +395,9 @@ export const createZarinpalCheckout = async (req, res) => {
     }));
     const initialPricesByProductId = new Map(
       validated.map((item) => [String(item.productId), item.product.price])
+    );
+    const initialLinePrices = new Map(
+      validated.map((item) => [item.productId + "::" + item.size + "::" + item.color, priceLine(item.product, item.quantity)])
     );
     // Ensure the per-user guard document exists outside the transaction (an upsert race
     // inside it would surface as a duplicate-key error instead of a retryable conflict).
@@ -411,10 +431,12 @@ export const createZarinpalCheckout = async (req, res) => {
           throw limitError;
         }
         const uniqueProductIds = [...new Set(transactionItems.map((item) => String(item.product)))];
-        const currentProducts = await Product.find({
+        const currentProductQuery = Product.find({
           _id: { $in: uniqueProductIds },
           isActive: { $ne: false },
-        }).session(session).lean();
+        });
+        const currentProducts = await (wholesaleBuyer ? currentProductQuery.select(WHOLESALE_FIELDS) : currentProductQuery)
+          .session(session).lean();
         const transactionProductsById = new Map(currentProducts.map((product) => [String(product._id), product]));
         if (transactionProductsById.size !== uniqueProductIds.length) {
           throw new Error("INVALID_CART");
@@ -432,7 +454,14 @@ export const createZarinpalCheckout = async (req, res) => {
           if (!currentProduct || !Number.isSafeInteger(currentProduct.price) || currentProduct.price < 0) {
             throw new Error("INVALID_CART");
           }
-          return sum + currentProduct.price * item.quantity;
+          const linePrice = priceLine(currentProduct, item.quantity);
+          // Wholesale terms (product wholesale price or the account discount) changed mid-checkout.
+          if (linePrice !== initialLinePrices.get(String(item.product) + "::" + item.size + "::" + item.color)) {
+            const priceError = new Error("PRICE_CHANGED");
+            priceError.code = "PRICE_CHANGED";
+            throw priceError;
+          }
+          return sum + linePrice * item.quantity;
         }, 0);
         if (!Number.isSafeInteger(transactionSubtotal) || transactionSubtotal < 0) {
           const amountError = new Error("Invalid checkout amount");
@@ -469,7 +498,7 @@ export const createZarinpalCheckout = async (req, res) => {
           throw amountError;
         }
 
-        const reservations = await reserveInventory(transactionItems, transactionProductsById, { session });
+        const reservations = await reserveInventory(transactionItems, transactionProductsById, { session, unitPrice: priceLine });
         const [createdOrder] = await Order.create([{
           _id: checkoutOrderId,
           user: req.user._id,
@@ -478,6 +507,7 @@ export const createZarinpalCheckout = async (req, res) => {
           shipmentStatus: "not_ready",
           totalAmount: transactionTotal,
           subtotalAmount: transactionSubtotal,
+          pricingTier: wholesaleBuyer ? "wholesale" : "retail",
           shippingFee: transactionShippingFee,
           currency: "IRT",
           paymentProvider: "zarinpal",
