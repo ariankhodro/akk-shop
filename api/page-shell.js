@@ -53,7 +53,12 @@ export default async function handler(req, res) {
     shell = await fetchAppShell(requestOrigin);
   } catch (error) {
     console.error("Could not load storefront shell for route metadata", { path, message: error.message });
-    return res.status(503).send("Storefront temporarily unavailable");
+    return sendHtml(
+      res,
+      503,
+      MINIMAL_SHELL.replace('<div id="root"></div>', "<main><p>فروشگاه موقتاً در دسترس نیست. لطفاً چند لحظه بعد دوباره تلاش کنید.</p></main>"),
+      { head: method === "HEAD", robotsHeader: "noindex, nofollow", retryAfter: 30, cacheControl: "no-store" }
+    );
   }
 
   if (!metadata) {
