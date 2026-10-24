@@ -11,16 +11,16 @@
 		"test": "node --test tests/refresh-flow.test.js tests/user-error-message.test.js tests/seo-utils.test.js tests/seo-handlers.test.js"
 	},
 	"dependencies": {
-		"react": "^18.3.1",
-		"react-dom": "^18.3.1",
+		"axios": "^1.20.0",
+		"framer-motion": "^11.18.2",
 		"lucide-react": "^0.435.0",
+		"react": "^18.3.1",
 		"react-confetti": "^6.1.0",
+		"react-dom": "^18.3.1",
 		"react-hot-toast": "^2.4.1",
-		"react-router-dom": "^6.26.1",
-		"recharts": "^2.12.7",
-		"framer-motion": "^11.3.30",
-		"zustand": "^4.5.5",
-		"axios": "^1.7.5"
+		"react-router-dom": "^6.30.6",
+		"recharts": "^2.15.4",
+		"zustand": "^4.5.7"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.9.0",
@@ -33,8 +33,8 @@
 		"eslint-plugin-react-hooks": "^5.1.0-rc.0",
 		"eslint-plugin-react-refresh": "^0.4.9",
 		"globals": "^15.9.0",
-		"postcss": "^8.4.41",
-		"tailwindcss": "^3.4.10",
-		"vite": "^5.4.1"
+		"postcss": "^8.5.31",
+		"tailwindcss": "^3.4.19",
+		"vite": "^5.4.21"
 	}
 }
