@@ -24,6 +24,7 @@ import { globalJsonBody } from "./middleware/body-parsers.middleware.js";
 import { browserOriginAndCors, securityHeaders } from "./middleware/security.middleware.js";
 import { requestContext } from "./middleware/request-context.middleware.js";
 import { trustProxyHops } from "./lib/config.js";
+import { createFrontendServer } from "./middleware/serve-frontend.middleware.js";
 import { logger, errorFields } from "./lib/logger.js";
 
 const app = express();
@@ -102,6 +103,9 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/service-cases", serviceCaseRoutes);
 
 app.use("/api", (_req, res) => res.status(404).json({ message: "API route not found" }));
+// Optional: serve the built storefront from this process (single-command deployments).
+if (process.env.SERVE_FRONTEND === "true") app.use(await createFrontendServer());
+
 app.use((error, _req, res, next) => {
   if (res.headersSent) return next(error);
   if (error?.status === 413 || error?.statusCode === 413) {

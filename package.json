@@ -8,7 +8,9 @@
     "start": "node backend/server.js",
     "build": "npm ci && npm ci --prefix frontend && npm run build --prefix frontend && npm run build --prefix backend && node --check api/share-preview.js && node --check api/page-shell.js && node --check api/robots.js && node --check api/sitemap.js && node --check api/sitemap-products.js && node --check api/sitemap-static.js && node --check seo/server-utils.js && node --check frontend/src/lib/seo-utils.js",
     "test": "npm test --prefix backend",
-    "audit:inventory": "node scripts/audit-untracked-inventory.mjs"
+    "audit:inventory": "node scripts/audit-untracked-inventory.mjs",
+    "start:all": "node scripts/start-all.mjs",
+    "dev:all": "node scripts/dev-all.mjs"
   },
   "keywords": [],
   "author": "",
