@@ -5,6 +5,7 @@ import {
   toggleFeaturedProduct, updateProduct, setProductActive, updateProductStock, updateProductVariantStock,
 } from "../controllers/product.controller.js";
 import { adminRoute, protectRoute } from "../middleware/auth.middleware.js";
+import { largeJsonBody } from "../middleware/body-parsers.middleware.js";
 
 const router = express.Router();
 
@@ -18,9 +19,9 @@ router.get("/category/:category", getProductsByCategory);
 router.get("/recommendations", getRecommendedProducts);
 router.get("/", protectRoute, adminRoute, getAllProducts);
 router.get("/:id", getProductById);
-router.post("/", protectRoute, adminRoute, createProduct);
+router.post("/", protectRoute, adminRoute, largeJsonBody, createProduct);
 router.patch("/:id/stock", protectRoute, adminRoute, updateProductStock);
-router.put("/:id", protectRoute, adminRoute, updateProduct);
+router.put("/:id", protectRoute, adminRoute, largeJsonBody, updateProduct);
 router.patch("/:id/active", protectRoute, adminRoute, setProductActive);
 router.patch("/:id/variant-stock", protectRoute, adminRoute, updateProductVariantStock);
 router.patch("/:id", protectRoute, adminRoute, toggleFeaturedProduct);
