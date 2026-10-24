@@ -7,6 +7,7 @@ import { createReadStream, existsSync, statSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 
 const require = createRequire(import.meta.url);
@@ -49,10 +50,10 @@ await new Promise((resolve) => server.listen(FRONT, "127.0.0.1", resolve));
 
 const env = {
   ...process.env, NODE_ENV: "test", PORT: String(API), MONGO_URI: MONGO, REDIS_URL: REDIS,
-  ACCESS_TOKEN_SECRET: "e2e-access-secret-0123456789abcdef0123456789", REFRESH_TOKEN_SECRET: "e2e-refresh-secret-fedcba9876543210fedcba98765",
-  RATE_LIMIT_KEY_SALT: "e2e-rate-limit-salt-0123456789", CLIENT_URL: ORIGIN, API_URL: ORIGIN, ALLOW_INSECURE_COOKIES: "true",
+  ACCESS_TOKEN_SECRET: randomBytes(32).toString("hex"), REFRESH_TOKEN_SECRET: randomBytes(32).toString("hex"),
+  RATE_LIMIT_KEY_SALT: randomBytes(16).toString("hex"), CLIENT_URL: ORIGIN, API_URL: ORIGIN, ALLOW_INSECURE_COOKIES: "true",
   ZARINPAL_MERCHANT_ID: "00000000-0000-0000-0000-000000000000", ZARINPAL_SANDBOX: "true", IRT_CATALOG_PRICES_CONFIRMED: "true",
-  CRON_SECRET: "e2e-cron-secret-0123456789abcdef0123456789", BCRYPT_COST: "10",
+  CRON_SECRET: randomBytes(32).toString("hex"), BCRYPT_COST: "10",
 };
 const backend = spawn("node", ["--import", path.join(root, "e2e/zarinpal-mock-preload.mjs"), "backend/server.js"], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
 let backendLog = "";
