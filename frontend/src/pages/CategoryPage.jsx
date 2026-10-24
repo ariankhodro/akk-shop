@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import axios from "../lib/axios";
 import { formatPrice, getCurrencyLabel, STORE_CURRENCY } from "../lib/commerce";
 import { normalizeDigits, normalizePersianText as normalizePersian } from "../lib/persian-search";
+import { useDialog } from "../lib/use-dialog";
 import { useProductStore } from "../stores/useProductStore";
 import { useCategoryStore } from "../stores/useCategoryStore";
 
@@ -146,6 +147,7 @@ const CategoryPage = () => {
   const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
   const [draftFilters, setDraftFilters] = useState(() => filtersFromParams(searchParams));
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const mobileFiltersRef = useDialog({ open: mobileFiltersOpen, onClose: () => setMobileFiltersOpen(false) });
   const [page, setPage] = useState(() => parsePageNumber(searchParams.get("page")));
   const [draftResultCount, setDraftResultCount] = useState(0);
 
@@ -860,6 +862,7 @@ const CategoryPage = () => {
             className="absolute inset-0 h-full w-full bg-[#252722]/45 backdrop-blur-sm"
           />
           <section
+            ref={mobileFiltersRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-category-filters-title"

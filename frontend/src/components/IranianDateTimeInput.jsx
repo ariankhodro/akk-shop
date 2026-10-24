@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDialog } from "../lib/use-dialog";
 import { CalendarDays, CalendarClock, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import {
   createIranianDateTimeInputValue,
@@ -15,6 +16,7 @@ const weekdays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
 const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) => {
   const [touched, setTouched] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const pickerRef = useDialog({ open: showPicker, onClose: () => setShowPicker(false), modal: false });
   const [visibleMonth, setVisibleMonth] = useState(null);
   const parsed = parseIranianDateTime(value);
   const parts = getIranianDateParts(parsed || new Date()) || { year: 1405, month: 1, day: 1, hour: 12, minute: 0 };
@@ -104,6 +106,7 @@ const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) 
       {showPicker && (
         <div
           id={id + "-jalali-picker"}
+          ref={pickerRef}
           role="dialog"
           aria-label={label + " - تقویم شمسی"}
           className="absolute right-0 top-full z-50 mt-2 w-[min(100%,22rem)] rounded-2xl border border-gray-600 bg-gray-900 p-4 text-gray-100 shadow-2xl"
