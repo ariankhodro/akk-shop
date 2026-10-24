@@ -6,6 +6,7 @@ import {
   normalizeSeoText,
   safeJson,
 } from "../frontend/src/lib/seo-utils.js";
+import { applyHtmlSecurityHeaders } from "./security-headers.js";
 
 const DYNAMIC_META_KEYS = /^(description|robots|application-name|public-site-url|seo-preview|og:(locale|site_name|type|title|description|url|image|image:alt)|twitter:(card|title|description|image)|product:price:(amount|currency))$/i;
 
@@ -144,7 +145,7 @@ export function renderHtmlShell(shell, options = {}) {
 
 export function sendHtml(res, status, html, options = {}) {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("X-Content-Type-Options", "nosniff");
+  applyHtmlSecurityHeaders(res);
   if (options.cacheControl) res.setHeader("Cache-Control", options.cacheControl);
   if (options.robotsHeader) res.setHeader("X-Robots-Tag", options.robotsHeader);
   if (options.retryAfter) res.setHeader("Retry-After", String(options.retryAfter));
