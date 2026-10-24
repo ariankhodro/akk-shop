@@ -15,7 +15,7 @@ export const normalizePersianText = (value) =>
     .replace(/[ۀة]/g, "ه")
     .replace(/[ؤ]/g, "و")
     .replace(/[إأآٱ]/g, "ا")
-    .replace(/[\u0640\u064B-\u065F\u0670]/g, "")
+    .replace(/\u0640|[\u064B-\u065F]|\u0670/g, "")
     .replace(/[\u200B\uFEFF]/g, "")
     .replace(/[\u200C\u200D]/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")

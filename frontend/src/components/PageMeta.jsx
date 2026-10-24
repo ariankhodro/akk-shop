@@ -6,7 +6,6 @@ import {
   buildProductStructuredData,
   buildSiteStructuredData,
   canonicalOrigin,
-  canonicalUrlFor,
   canonicalUrlForQuery,
   DEFAULT_SEO_DESCRIPTION,
   DEFAULT_SEO_TITLE,

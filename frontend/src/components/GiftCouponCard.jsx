@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Check, LoaderCircle, TicketPercent, X } from "lucide-react";
-import toast from "react-hot-toast";
 import { useCartStore } from "../stores/useCartStore";
 import { formatPrice } from "../lib/commerce";
 

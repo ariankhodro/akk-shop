@@ -79,7 +79,7 @@ const CollectionPage = ({ type = "newest" }) => {
     } finally {
       setLoading(false);
     }
-  }, [config, slug, type]);
+  }, [config, type]);
 
   useEffect(() => {
     loadCollection();

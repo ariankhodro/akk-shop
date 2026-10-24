@@ -33,4 +33,8 @@ export default [
 			"react/prop-types": "off",
 		},
 	},
+	{
+		files: ["tests/**/*.js", "eslint.config.js", "vite.config.js", "postcss.config.js", "tailwind.config.js"],
+		languageOptions: { globals: globals.node },
+	},
 ];

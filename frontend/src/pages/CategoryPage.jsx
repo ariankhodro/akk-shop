@@ -90,7 +90,9 @@ const filtersFromParams = (params) => {
   try {
     const attributes = JSON.parse(params.get("attributes") || "{}");
     if (attributes && typeof attributes === "object" && !Array.isArray(attributes)) filters.attributes = attributes;
-  } catch {}
+  } catch {
+    // Malformed "attributes" query param: ignore it and keep default filters.
+  }
   return filters;
 };
 
@@ -189,7 +191,7 @@ const CategoryPage = () => {
     fetchProductsByCategory(category, query.toString());
   }, [fetchProductsByCategory, category, filters, page]);
 
-  const catalog = Array.isArray(products) ? products : [];
+  const catalog = useMemo(() => (Array.isArray(products) ? products : []), [products]);
   const priceBounds = useMemo(() => {
     const reportedCount = Number(remotePriceBounds?.count);
     const reportedMin = Number(remotePriceBounds?.minPrice);
