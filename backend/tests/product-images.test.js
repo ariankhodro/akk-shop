@@ -144,7 +144,16 @@ const makeStoredProduct = (images, overrides = {}) => {
     async save() { if (this.saveError) throw this.saveError; this.saveCalls += 1; },
     ...overrides,
   };
+  product.toObject = () => ({ ...product, variants: [...product.variants] });
   stub(Product, "findById", async () => product);
+  // updateProduct now writes through a conditional findOneAndUpdate (stock deltas, BIZ-5)
+  // instead of document.save(); the stub applies the $set to the in-memory product.
+  stub(Product, "findOneAndUpdate", async (_filter, update) => {
+    if (product.saveError) throw product.saveError;
+    product.saveCalls += 1;
+    Object.assign(product, update.$set);
+    return product;
+  });
   return product;
 };
 
