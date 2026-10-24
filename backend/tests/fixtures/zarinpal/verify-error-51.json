@@ -1,0 +1,12 @@
+{
+  "_provenance": "CONSTRUCTED FROM OFFICIAL DOCS AS RECALLED - NOT RECORDED FROM A LIVE SANDBOX. Not sandbox-verified.",
+  "http": 200,
+  "body": {
+    "data": [],
+    "errors": {
+      "code": -51,
+      "message": "Session is not valid, session is not active paid try.",
+      "validations": []
+    }
+  }
+}
