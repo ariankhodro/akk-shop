@@ -14,7 +14,8 @@ try {
   const response = await fetch(`${apiOrigin}/api/payments/reconcile-pending`, {
     method: "GET",
     headers: { Authorization: `Bearer ${cronSecret}`, Accept: "application/json" },
-    signal: AbortSignal.timeout(25000),
+    // The server budgets ~40 s of work per run plus provider calls; 25 s caused false failures.
+    signal: AbortSignal.timeout(58000),
   });
   const body = await response.text();
   if (!response.ok) {

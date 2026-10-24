@@ -5,12 +5,14 @@ import { recordAuditEvent } from "../lib/audit-log.js";
 import {
   calculateCouponDiscount,
   couponEligibilityError,
+  couponUserLimitError,
+  DEFAULT_PER_USER_LIMIT,
   normalizeCouponCode,
 } from "../lib/coupons.js";
 
 const couponFields = [
   "code", "description", "discountPercentage", "startsAt", "expiresAt",
-  "minOrderAmount", "maxDiscountAmount", "usageLimit", "isActive",
+  "minOrderAmount", "maxDiscountAmount", "usageLimit", "perUserLimit", "isActive",
 ];
 
 const toDate = (value) => {
@@ -52,6 +54,13 @@ const normalizeCouponInput = (input, current = {}) => {
   if (maxDiscount.error) return maxDiscount;
   const usageLimit = optionalWholeAmount(source.usageLimit, "محدودیت تعداد استفاده", { allowZero: false });
   if (usageLimit.error) return usageLimit;
+  // Absent => 1 use per account (safe default). An explicit empty value means unlimited.
+  let perUserLimit = DEFAULT_PER_USER_LIMIT;
+  if (source.perUserLimit !== undefined) {
+    const parsed = optionalWholeAmount(source.perUserLimit, "محدودیت استفاده برای هر کاربر", { allowZero: false });
+    if (parsed.error) return parsed;
+    perUserLimit = parsed.value;
+  }
   const isActive = source.isActive === undefined ? true : source.isActive;
   if (typeof isActive !== "boolean") return { error: "وضعیت فعال بودن معتبر نیست." };
 
@@ -65,6 +74,7 @@ const normalizeCouponInput = (input, current = {}) => {
       minOrderAmount: minimum.value ?? 0,
       maxDiscountAmount: maxDiscount.value,
       usageLimit: usageLimit.value,
+      perUserLimit,
       isActive,
     },
   };
@@ -112,6 +122,8 @@ export const validateCoupon = async (req, res) => {
     const coupon = await Coupon.findOne({ code }).lean();
     const eligibilityError = couponEligibilityError(coupon, cart.subtotal);
     if (eligibilityError) return res.status(400).json({ message: eligibilityError });
+    const userLimitError = await couponUserLimitError(coupon, req.user?._id);
+    if (userLimitError) return res.status(400).json({ message: userLimitError });
 
     return res.json({
       message: "کد تخفیف معتبر است.",
@@ -188,13 +200,21 @@ export const deleteCoupon = async (req, res) => {
     if (coupon.reservedCount > 0) {
       return res.status(409).json({ message: "این کد تخفیف سفارش در انتظار پرداخت دارد؛ پس از تعیین وضعیت پرداخت دوباره تلاش کنید." });
     }
+    // Conditional writes: a reservation created after the read above must win over the delete.
     let archived = false;
     if (coupon.usageCount > 0) {
-      coupon.isActive = false;
-      await coupon.save();
+      const result = await Coupon.updateOne({ _id: coupon._id, reservedCount: 0 }, { $set: { isActive: false } });
+      if (!result.matchedCount) {
+        return res.status(409).json({ message: "این کد تخفیف سفارش در انتظار پرداخت دارد؛ پس از تعیین وضعیت پرداخت دوباره تلاش کنید." });
+      }
       archived = true;
     } else {
-      await coupon.deleteOne();
+      const result = await Coupon.deleteOne({ _id: coupon._id, reservedCount: 0, usageCount: 0 });
+      if (!result.deletedCount) {
+        const stillThere = await Coupon.exists({ _id: coupon._id });
+        if (!stillThere) return res.status(404).json({ message: "کد تخفیف پیدا نشد." });
+        return res.status(409).json({ message: "این کد تخفیف هم‌زمان استفاده یا رزرو شد؛ پس از تعیین وضعیت پرداخت دوباره تلاش کنید." });
+      }
     }
     await recordAuditEvent(req, {
       action: archived ? "coupon.archived" : "coupon.deleted",
