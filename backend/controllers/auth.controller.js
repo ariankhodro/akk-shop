@@ -15,6 +15,7 @@ import {
   signAccessToken, signRefreshToken, verifyRefreshToken, tokenVersionOf,
   ACCESS_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS,
 } from "../lib/auth-tokens.js";
+import { effectivePermissions } from "../lib/rbac.js";
 import { readEmail, readPassword, readString, isPlainObject } from "../lib/input.js";
 import {
   consumeRateLimit, peekRateLimit, resetRateLimit, normalizeClientAddress, FAIL_MODE, RateLimitUnavailableError,
@@ -559,7 +560,10 @@ export const getProfile = async (req, res) => {
   const user = await User.findById(req.user._id).select("-password");
   if (!user) return res.status(404).json({ message: "حساب کاربری پیدا نشد." });
   if (ensureAddressBook(user)) await user.save();
-  return res.json(user);
+  // The server is the single source of truth for what the UI may show:
+  // effectivePermissions already accounts for the owner tier and deny-by-default.
+  const { tokenVersion: _tokenVersion, ...profile } = user.toObject();
+  return res.json({ ...profile, effectivePermissions: effectivePermissions(user) });
  } catch (error) {
   console.error("Loading customer profile failed", error.message);
   return res.status(500).json({ message: "دریافت اطلاعات پروفایل ناموفق بود." });
