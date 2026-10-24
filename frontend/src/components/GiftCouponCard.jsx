@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, LoaderCircle, TicketPercent, X } from "lucide-react";
-import toast from "react-hot-toast";
+import { normalizeDigits } from "../lib/normalize-digits";
 import { useCartStore } from "../stores/useCartStore";
 import { formatPrice } from "../lib/commerce";
 
@@ -51,7 +51,7 @@ const GiftCouponCard = () => {
           className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 py-2.5 text-sm uppercase tracking-wide text-[var(--ui-text)] outline-none transition placeholder:normal-case placeholder:tracking-normal placeholder:text-[var(--ui-muted)] focus:border-[#9aa58e] focus:ring-2 focus:ring-[var(--ui-focus)]/30"
           placeholder="مثلاً TIK20"
           value={userInputCode}
-          onChange={(event) => setUserInputCode(event.target.value.toUpperCase())}
+          onChange={(event) => setUserInputCode(normalizeDigits(event.target.value).toUpperCase())}
           disabled={applying || isCouponApplied}
         />
         {isCouponApplied && coupon ? (

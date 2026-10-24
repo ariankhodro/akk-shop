@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, ChevronLeft, Home, MapPin, Pencil, Plus, Save, Trash2, UserRound, X } from "lucide-react";
 import toast from "react-hot-toast";
 import axios from "../lib/axios";
+import { normalizeDigits } from "../lib/normalize-digits";
 import { useUserStore } from "../stores/useUserStore";
 
 const provinces = [
@@ -19,17 +20,14 @@ const emptyAddress = {
 const fieldClass = "mt-1 min-h-11 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 py-2.5 text-sm text-[var(--ui-text)] outline-none transition placeholder:text-[var(--ui-muted)] focus:border-[var(--ui-focus)] focus:ring-2 focus:ring-[var(--ui-focus)]/20";
 const getMessage = (error, fallback) => error.response?.data?.message || fallback;
 const addressFromSaved = address => ({ ...emptyAddress, ...address, label: address.label || "نشانی من" });
-const normalizeAddressDigits = value => String(value ?? "")
-  .replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
-  .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
 const normalizeIranianPhone = value => {
-  let phone = normalizeAddressDigits(value).replace(/\D/g, "");
+  let phone = normalizeDigits(value).replace(/\D/g, "");
   if (phone.startsWith("0098") && phone.length === 14) phone = "0" + phone.slice(4);
   else if (phone.startsWith("98") && phone.length === 12) phone = "0" + phone.slice(2);
   else if (phone.length === 10 && phone.startsWith("9")) phone = "0" + phone;
   return phone;
 };
-const normalizePostalCode = value => normalizeAddressDigits(value).replace(/\D/g, "").slice(0, 10);
+const normalizePostalCode = value => normalizeDigits(value).replace(/\D/g, "").slice(0, 10);
 
 const ProfilePage = () => {
   const user = useUserStore(state => state.user);
@@ -246,7 +244,7 @@ const ProfilePage = () => {
       ) : key === "addressLine" || key === "notes" ? (
         <textarea id={"address-field-" + key} value={addressForm?.[key] || ""} onChange={event => updateAddressField(key, event.target.value)} data-address-field={key} className={fieldClass + (addressErrors[key] ? " border-[var(--ui-danger)]" : "")} rows={key === "addressLine" ? 3 : 2} required={key === "addressLine"} maxLength={500} placeholder={options.placeholder || ""} aria-invalid={Boolean(addressErrors[key])} aria-describedby={addressErrors[key] ? "address-error-" + key : undefined} />
       ) : (
-        <input id={"address-field-" + key} value={addressForm?.[key] || ""} onChange={event => updateAddressField(key, key === "postalCode" ? normalizePostalCode(event.target.value) : key === "phone" ? normalizeAddressDigits(event.target.value) : event.target.value)} onBlur={key === "phone" ? () => updateAddressField(key, normalizeIranianPhone(addressForm?.[key])) : key === "postalCode" ? () => updateAddressField(key, normalizePostalCode(addressForm?.[key])) : undefined} data-address-field={key} className={fieldClass + (addressErrors[key] ? " border-[var(--ui-danger)]" : "")} required={options.required !== false} type={key === "phone" ? "tel" : "text"} inputMode={key === "phone" || key === "postalCode" ? "numeric" : undefined} dir={key === "phone" || key === "postalCode" ? "ltr" : undefined} maxLength={options.maxLength || 100} placeholder={options.placeholder || ""} aria-invalid={Boolean(addressErrors[key])} aria-describedby={addressErrors[key] ? "address-error-" + key : undefined} autoComplete={options.autoComplete} />
+        <input id={"address-field-" + key} value={addressForm?.[key] || ""} onChange={event => updateAddressField(key, key === "postalCode" ? normalizePostalCode(event.target.value) : key === "phone" ? normalizeDigits(event.target.value) : event.target.value)} onBlur={key === "phone" ? () => updateAddressField(key, normalizeIranianPhone(addressForm?.[key])) : key === "postalCode" ? () => updateAddressField(key, normalizePostalCode(addressForm?.[key])) : undefined} data-address-field={key} className={fieldClass + (addressErrors[key] ? " border-[var(--ui-danger)]" : "")} required={options.required !== false} type={key === "phone" ? "tel" : "text"} inputMode={key === "phone" || key === "postalCode" ? "numeric" : undefined} dir={key === "phone" || key === "postalCode" ? "ltr" : undefined} maxLength={options.maxLength || 100} placeholder={options.placeholder || ""} aria-invalid={Boolean(addressErrors[key])} aria-describedby={addressErrors[key] ? "address-error-" + key : undefined} autoComplete={options.autoComplete} />
       )}
       {addressErrors[key] && <span id={"address-error-" + key} role="alert" className="mt-1 block text-xs leading-5 text-[var(--ui-danger)]">{addressErrors[key]}</span>}
     </label>

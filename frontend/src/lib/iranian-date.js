@@ -1,3 +1,5 @@
+import { toLatinDigits } from "./normalize-digits.js";
+
 const TEHRAN_TIME_ZONE = "Asia/Tehran";
 const PERSIAN_CALENDAR_LOCALE = "en-US-u-ca-persian-nu-latn";
 const PERSIAN_DISPLAY_LOCALE = "fa-IR-u-ca-persian-nu-arabext";
@@ -56,11 +58,7 @@ function jalaliToGregorian(year, month, day) {
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
 }
 
-export function toLatinDigits(value) {
-  return String(value ?? "")
-    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
-}
+export { toLatinDigits };
 
 export function toPersianDigits(value) {
   return String(value ?? "").replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]);

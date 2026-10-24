@@ -3,6 +3,7 @@ import { ExternalLink, ImagePlus, LoaderCircle, Save, X } from "lucide-react";
 import { useProductStore } from "../stores/useProductStore";
 import { useCategoryStore } from "../stores/useCategoryStore";
 import { formatPrice, getCurrencyLabel, STORE_CURRENCY } from "../lib/commerce";
+import { useDialog } from "../lib/use-dialog";
 
 const currencyLabel = getCurrencyLabel(STORE_CURRENCY);
 const fitOptions = [
@@ -79,6 +80,7 @@ const makeInitialForm = (product) => {
 };
 
 const ProductEditForm = ({ product, onClose, onSaved }) => {
+  const dialogRef = useDialog({ open: true, onClose });
   const [form, setForm] = useState(() => makeInitialForm(product));
   const [variantStocks, setVariantStocks] = useState(() => Object.fromEntries(
     (product.variants || []).map((variant) => [variantKey(variant.size || "", variant.color || ""), String(variant.stock ?? 0)])
@@ -230,7 +232,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
 
   return (
     <div className="fixed inset-0 z-[120] overflow-y-auto bg-black/60 p-3 backdrop-blur-sm sm:p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="product-edit-title" dir="rtl" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} className="mx-auto my-4 max-w-5xl rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 text-[var(--ui-text)] shadow-2xl sm:my-8 sm:p-7">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="product-edit-title" dir="rtl" className="mx-auto my-4 max-w-5xl rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 text-[var(--ui-text)] shadow-2xl sm:my-8 sm:p-7">
         <div className="mb-5 flex items-start justify-between gap-3 border-b border-[var(--ui-border)] pb-4">
           <div>
             <h2 id="product-edit-title" className="text-xl font-bold text-[var(--ui-accent)] sm:text-2xl">ویرایش محصول</h2>
