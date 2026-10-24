@@ -14,6 +14,8 @@ const socialProfiles = [
   { id: "x", label: "ایکس (X)", href: import.meta.env.VITE_STORE_X_URL || "", Icon: null },
 ];
 
+const activeSocialProfiles = socialProfiles.filter(({ href }) => Boolean(href));
+
 const StoreFooter = () => {
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
@@ -50,10 +52,13 @@ const StoreFooter = () => {
             <Link to="/shop" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#252722] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#41443b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f]">شروع خرید <ArrowLeft size={14} aria-hidden="true" /></Link>
             <Link to="/wishlist" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#d5d0c5] bg-[#fffefa] px-4 py-2 text-xs font-semibold text-[#41443b] transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f]"><Heart size={14} aria-hidden="true" />علاقه‌مندی‌ها</Link>
           </div>
+          {(activeSocialProfiles.length > 0 || enamadVerificationUrl) && (
           <div className="mt-5 border-t border-[#d5d0c5] pt-4">
+            {activeSocialProfiles.length > 0 && (
+              <>
             <p className="text-xs font-semibold text-[#41443b]">ما را دنبال کنید</p>
             <div className="mt-2 flex items-center gap-2" aria-label="شبکه‌های اجتماعی تیک بوتیک">
-              {socialProfiles.map(({ id, label, href, Icon }) => {
+              {activeSocialProfiles.map(({ id, label, href, Icon }) => {
                 const icon = Icon ? <Icon size={18} aria-hidden="true" /> : (
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
                     <path d="M18.9 2H22l-6.78 7.75L23.2 22h-6.25l-4.9-7.39L5.58 22H2.45l7.25-8.29L1.8 2h6.4l4.43 6.77L18.9 2Zm-1.1 18h1.73L7.28 3.89H5.42L17.8 20Z" />
@@ -64,37 +69,25 @@ const StoreFooter = () => {
                     className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d5d0c5] bg-[#fffefa] text-[#41443b] transition hover:border-[#68745f] hover:text-[#68745f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f]">
                     {icon}
                   </a>
-                ) : (
-                  <span key={id} title={"برای فعال‌سازی، نشانی " + label + " را در تنظیمات سایت وارد کنید."} aria-label={label + " (نشانی تنظیم نشده)"}
-                    className="inline-flex h-10 w-10 cursor-not-allowed items-center justify-center rounded-full border border-[#d5d0c5] bg-white/50 text-[#85867d]">
-                    {icon}
-                  </span>
-                );
+                ) : null;
               })}
             </div>
-            <p className="mt-2 text-[11px] leading-5 text-[#85867d]">پیوندهای شبکه‌های اجتماعی از تنظیمات سایت خوانده می‌شوند.</p>
+              </>
+            )}
+            {enamadVerificationUrl && (
             <div className="mt-4 flex items-center gap-3 rounded-xl border border-[#d5d0c5] bg-[#fffefa] p-3">
-              {enamadVerificationUrl ? (
                 <a href={enamadVerificationUrl} target="_blank" rel="noopener noreferrer" aria-label="استعلام نماد اعتماد الکترونیکی تیک بوتیک"
                   className="inline-flex shrink-0 items-center justify-center rounded-lg bg-white p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#68745f]">
                   <img src={enamadImage} alt="نماد اعتماد الکترونیکی" loading="lazy" referrerPolicy="no-referrer" className="h-16 w-16 object-contain" />
                 </a>
-              ) : (
-                <span aria-label="تصویر عمومی نماد اعتماد الکترونیکی؛ لینک اختصاصی اعتبارسنجی هنوز تنظیم نشده است"
-                  className="inline-flex shrink-0 items-center justify-center rounded-lg bg-white p-1">
-                  <img src={enamadImage} alt="تصویر نماد اعتماد الکترونیکی" loading="lazy" referrerPolicy="no-referrer" className="h-16 w-16 object-contain" />
-                </span>
-              )}
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-[#41443b]">نماد اعتماد الکترونیکی</p>
-                <p className="mt-1 text-[11px] leading-5 text-[#77786f]">
-                  {enamadVerificationUrl
-                    ? "برای مشاهده وضعیت و اطلاعات نماد، روی تصویر کلیک کنید."
-                    : "برای اعتبارسنجی رسمی فروشگاه، لینک اختصاصی اینماد را در VITE_ENAMAD_SEAL_LINK_URL تنظیم کنید."}
-                </p>
+                <p className="mt-1 text-[11px] leading-5 text-[#77786f]">برای مشاهده وضعیت و اطلاعات نماد، روی تصویر کلیک کنید.</p>
               </div>
             </div>
+            )}
           </div>
+          )}
         </section>
 
         <nav aria-label="راهنمای خرید">
