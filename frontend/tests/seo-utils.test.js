@@ -141,7 +141,7 @@ test("server HTML transform keeps the app bundle and injects unique Persian meta
     structuredData: { "@type": "Product", name: "پیراهن" },
     rootContent: "<main><h1>پیراهن آبی</h1></main>",
   });
-  assert.match(rendered, /<title>پیراهن آبی \| تیک بوتیک<\/title>/);
+  assert.match(rendered, /<title>پیراهن آبی \| میبا<\/title>/);
   assert.match(rendered, /<link rel="canonical" href="https:\/\/shop\.example\/product\/abc123">/);
   assert.match(rendered, /<div id="root"><main><h1>پیراهن آبی<\/h1><\/main><\/div>/);
   assert.match(rendered, /src="\/assets\/app\.js"/);

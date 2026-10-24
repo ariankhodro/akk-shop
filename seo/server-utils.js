@@ -128,9 +128,9 @@ export async function fetchAppShell(requestOrigin) {
 }
 
 export function renderHtmlShell(shell, options = {}) {
-  const title = normalizeSeoText(options.title, "تیک بوتیک | فروشگاه آنلاین پوشاک و اکسسوری", 180);
-  const description = normalizeSeoText(options.description, "خرید آنلاین پوشاک و اکسسوری در تیک بوتیک.", 300);
-  const fullTitle = title.includes("تیک بوتیک") ? title : title + " | تیک بوتیک";
+  const title = normalizeSeoText(options.title, "میبا | فروشگاه تخصصی قطعات یدکی خودروهای چینی", 180);
+  const description = normalizeSeoText(options.description, "خرید آنلاین قطعات یدکی خودروهای چینی در میبا.", 300);
+  const fullTitle = title.includes("میبا") ? title : title + " | میبا";
   const origin = canonicalOrigin(options.siteOrigin || options.requestOrigin || "", "");
   const canonical = options.canonical || "";
   const image = absoluteUrlFor(options.image || "", origin);
@@ -149,11 +149,11 @@ export function renderHtmlShell(shell, options = {}) {
   const meta = [
     '<meta name="description" content="' + escapeHtml(description) + '">',
     '<meta name="robots" content="' + escapeHtml(robots) + '">',
-    '<meta name="application-name" content="تیک بوتیک">',
+    '<meta name="application-name" content="میبا">',
     origin ? '<meta name="public-site-url" content="' + escapeHtml(origin) + '">' : "",
     !origin ? '<meta name="seo-preview" content="true">' : "",
     '<meta property="og:locale" content="fa_IR">',
-    '<meta property="og:site_name" content="تیک بوتیک">',
+    '<meta property="og:site_name" content="میبا">',
     '<meta property="og:type" content="' + type + '">',
     '<meta property="og:title" content="' + escapeHtml(fullTitle) + '">',
     '<meta property="og:description" content="' + escapeHtml(description) + '">',

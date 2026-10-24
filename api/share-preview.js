@@ -20,79 +20,81 @@ import {
 } from "../seo/server-utils.js";
 import { isSafeInternalHref } from "../seo/internal-href.js";
 
-const MINIMAL_SHELL = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>تیک بوتیک</title></head><body><div id="root"></div></body></html>';
+const MINIMAL_SHELL = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>میبا</title></head><body><div id="root"></div></body></html>';
 
 const categoryLabels = {
-  jeans: "شلوار جین",
-  "t-shirts": "تی‌شرت",
-  shoes: "کفش",
-  glasses: "عینک",
-  jackets: "کت و کاپشن",
-  suits: "کت‌وشلوار",
-  bags: "کیف",
+  engine: "قطعات موتوری",
+  brakes: "سیستم ترمز",
+  suspension: "جلوبندی و تعلیق",
+  filters: "فیلترها",
+  electrical: "برق و الکترونیک",
+  body: "بدنه و تزئینات",
+  transmission: "گیربکس و کلاچ",
+  cooling: "سیستم خنک‌کاری",
 };
 
 const legacyCategoryDescriptions = {
-  jeans: "مدل‌های متنوع شلوار جین برای استایل روزمره و ترکیب‌های مختلف پوشاک.",
-  "t-shirts": "تی‌شرت‌های متنوع برای استفاده روزمره و ساختن استایل‌های ساده و راحت.",
-  shoes: "کفش‌های متنوع برای تکمیل استایل روزمره و انتخاب‌های مختلف.",
-  glasses: "عینک‌ها و اکسسوری‌های مکمل برای کامل‌کردن ظاهر.",
-  jackets: "کت و کاپشن برای لایه‌بندی لباس و استایل روزهای خنک.",
-  suits: "کت‌وشلوار و پوشاک رسمی برای موقعیت‌های مختلف.",
-  bags: "کیف‌های کاربردی برای تکمیل استایل و استفاده روزمره.",
+  engine: "تسمه تایم، واشر سرسیلندر، شمع، پمپ روغن و سایر قطعات موتور خودروهای چینی.",
+  brakes: "لنت، دیسک، کاسه چرخ، پمپ و شیلنگ ترمز خودروهای چینی.",
+  suspension: "کمک‌فنر، طبق، سیبک، بوش و قطعات فرمان خودروهای چینی.",
+  filters: "فیلتر روغن، هوا، بنزین و کابین برای خودروهای چینی.",
+  electrical: "سنسور، کوئل، دینام، استارت و قطعات برقی خودروهای چینی.",
+  body: "سپر، آینه، چراغ و قطعات بدنه خودروهای چینی.",
+  transmission: "دیسک و صفحه کلاچ، بلبرینگ و قطعات گیربکس خودروهای چینی.",
+  cooling: "رادیاتور، واترپمپ، ترموستات و فن خودروهای چینی.",
 };
 
 const collectionConfigs = {
   shop: {
     routePath: "/shop",
-    title: "فروشگاه پوشاک و اکسسوری",
-    description: "جست‌وجو، فیلتر و خرید محصولات فروشگاه تیک بوتیک.",
+    title: "فروشگاه قطعات یدکی خودروهای چینی",
+    description: "جست‌وجو با نام یا کد فنی، فیلتر بر اساس خودرو و خرید قطعات از میبا.",
     endpoint: "products/search?page=1&limit=8&sort=newest",
   },
   campaigns: {
     routePath: "/campaigns",
     title: "پیشنهادهای ویژه",
-    description: "کمپین‌ها و پیشنهادهای فعال فروشگاه تیک بوتیک.",
+    description: "کمپین‌ها و پیشنهادهای فعال فروشگاه میبا.",
     campaigns: true,
   },
   "new-arrivals": {
     routePath: "/new-arrivals",
-    title: "تازه‌واردها",
-    description: "جدیدترین محصولات اضافه‌شده به تیک بوتیک را ببینید.",
+    title: "تازه‌ترین قطعات",
+    description: "جدیدترین قطعات اضافه‌شده به انبار میبا را ببینید.",
     endpoint: "products/newest?limit=8",
   },
   bestsellers: {
     routePath: "/bestsellers",
-    title: "پرفروش‌های فروشگاه",
-    description: "محصولات پرفروش تیک بوتیک را مشاهده کنید.",
+    title: "پرفروش‌ترین قطعات",
+    description: "قطعات یدکی پرفروش میبا را مشاهده کنید.",
     endpoint: "products/bestsellers?limit=8",
   },
   "featured-products": {
     routePath: "/featured-products",
-    title: "محصولات منتخب",
-    description: "مجموعه‌ای از محصولات منتخب تیک بوتیک را بررسی کنید.",
+    title: "قطعات منتخب",
+    description: "مجموعه‌ای از قطعات منتخب میبا را بررسی کنید.",
     endpoint: "products/featured",
   },
   "look-daily-style": {
     routePath: "/looks/daily-style",
-    title: "استایل روزمره",
-    description: "پایه‌های راحت برای ترکیب روزانه؛ از شلوار جین تا تی‌شرت و کفش.",
-    categories: ["jeans", "t-shirts", "shoes"],
-    image: "/jeans.jpg",
+    title: "کیت سرویس دوره‌ای",
+    description: "فیلترها و قطعات موتوری برای سرویس دوره‌ای خودروهای چینی.",
+    categories: ["filters", "engine", "cooling"],
+    image: "/categories/filters.svg",
   },
   "look-layers": {
     routePath: "/looks/layers",
-    title: "لایه‌های ماندگار",
-    description: "ترکیب کت و شلوار برای روزهای خنک و انتخاب‌های چندفصلی.",
-    categories: ["jackets", "jeans", "t-shirts"],
-    image: "/jackets.jpg",
+    title: "ایمنی و ترمز",
+    description: "لنت، دیسک و قطعات جلوبندی برای ایمنی و سواری مطمئن.",
+    categories: ["brakes", "suspension"],
+    image: "/categories/brakes.svg",
   },
   "look-details": {
     routePath: "/looks/details",
-    title: "جزئیات تکمیل‌کننده",
-    description: "اکسسوری‌ها و انتخاب‌های ساده برای کامل‌کردن ظاهر.",
-    categories: ["bags", "glasses", "shoes"],
-    image: "/bags.jpg",
+    title: "برق و بدنه",
+    description: "قطعات برقی، چراغ و قطعات بدنه خودروهای چینی.",
+    categories: ["electrical", "body", "transmission"],
+    image: "/categories/electrical.svg",
   },
 };
 
@@ -111,12 +113,12 @@ const imageHtml = (image, alt, origin, dimensions = "width=\"800\" height=\"1000
 };
 
 const pageLayout = (title, description, innerHtml) =>
-  '<main lang="fa" dir="rtl" style="max-width:1200px;margin:0 auto;padding:24px 16px;color:#252722;font-family:Tahoma,Arial,sans-serif;line-height:1.9">' +
-    '<nav aria-label="مسیر صفحه" style="font-size:13px;margin-bottom:16px"><a href="/" style="color:#68745f">صفحه اصلی</a> / <a href="/shop" style="color:#68745f">فروشگاه</a></nav>' +
+  '<main lang="fa" dir="rtl" style="max-width:1200px;margin:0 auto;padding:24px 16px;color:#1c1f24;font-family:Tahoma,Arial,sans-serif;line-height:1.9">' +
+    '<nav aria-label="مسیر صفحه" style="font-size:13px;margin-bottom:16px"><a href="/" style="color:#c2410c">صفحه اصلی</a> / <a href="/shop" style="color:#c2410c">فروشگاه</a></nav>' +
     '<h1 style="font-size:28px;line-height:1.5;margin:0 0 12px">' + escapeHtml(title) + '</h1>' +
-    '<p style="font-size:15px;color:#62645c;margin:0 0 20px">' + escapeHtml(normalizeSeoText(description, "", 1000)) + '</p>' +
+    '<p style="font-size:15px;color:#5a606a;margin:0 0 20px">' + escapeHtml(normalizeSeoText(description, "", 1000)) + '</p>' +
     innerHtml +
-    '<p style="margin-top:28px"><a href="/shop" style="display:inline-block;border-radius:999px;background:#252722;color:#fff;padding:9px 18px;text-decoration:none">مشاهده فروشگاه</a></p>' +
+    '<p style="margin-top:28px"><a href="/shop" style="display:inline-block;border-radius:999px;background:#1c1f24;color:#fff;padding:9px 18px;text-decoration:none">مشاهده فروشگاه</a></p>' +
   '</main>';
 
 const renderProductCards = (products, origin) => {
@@ -124,13 +126,13 @@ const renderProductCards = (products, origin) => {
     .filter((product) => product && product._id && product.isActive !== false)
     .slice(0, 24);
   if (!items.length) return "";
-  return '<section aria-label="محصولات مرتبط" style="margin-top:24px"><h2 style="font-size:20px">محصولات</h2>' +
+  return '<section aria-label="قطعات مرتبط" style="margin-top:24px"><h2 style="font-size:20px">قطعات</h2>' +
     '<ul style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;list-style:none;padding:0">' +
     items.map((product) => {
       const href = "/product/" + encodeURIComponent(String(product._id));
       const image = absoluteUrlFor(product.image || product.images?.[0] || "", origin);
-      return '<li style="border:1px solid #e4e0d8;border-radius:14px;padding:12px;background:#fffefa">' +
-        '<a href="' + escapeHtml(href) + '" style="color:#252722;text-decoration:none">' +
+      return '<li style="border:1px solid #e2e5ea;border-radius:14px;padding:12px;background:#ffffff">' +
+        '<a href="' + escapeHtml(href) + '" style="color:#1c1f24;text-decoration:none">' +
         (image ? '<img src="' + escapeHtml(image) + '" alt="' + escapeHtml(product.name || "تصویر محصول") + '" width="400" height="500" loading="lazy" style="width:100%;height:auto;aspect-ratio:4/5;object-fit:cover;border-radius:8px">' : "") +
         '<h3 style="font-size:15px;line-height:1.7">' + escapeHtml(product.name || "محصول") + '</h3>' +
         '</a>' +
@@ -177,17 +179,17 @@ const renderProductContent = (product, canonical, origin) => {
   const detailHtml =
     (image ? '<div style="max-width:480px;margin:16px 0">' + imageHtml(image, product.name || "تصویر محصول", origin) + '</div>' : "") +
     (priceText(product.price) ? '<p style="font-size:21px;font-weight:bold">' + escapeHtml(priceText(product.price)) + '</p>' : "") +
-    '<p style="font-size:14px;color:#62645c">' + escapeHtml(availability) + '</p>' +
+    '<p style="font-size:14px;color:#5a606a">' + escapeHtml(availability) + '</p>' +
     (category ? '<p>دسته‌بندی: <a href="/category/' + escapeHtml(encodeURIComponent(category)) + '">' + escapeHtml(categoryName) + '</a></p>' : "") +
     detailsHtml +
-    '<p><a href="' + escapeHtml(canonical || "/product/" + encodeURIComponent(String(product._id || ""))) + '" style="color:#526149">مشاهده جزئیات و گزینه‌های محصول</a></p>';
-  return pageLayout(product.name || "محصول", product.description || "جزئیات، قیمت و مشخصات محصول در تیک بوتیک.", detailHtml);
+    '<p><a href="' + escapeHtml(canonical || "/product/" + encodeURIComponent(String(product._id || ""))) + '" style="color:#c2410c">مشاهده جزئیات و گزینه‌های محصول</a></p>';
+  return pageLayout(product.name || "قطعه یدکی", product.description || "جزئیات، کد فنی، قیمت و خودروهای سازگار در میبا.", detailHtml);
 };
 
 const renderCategoryContent = (category, products, origin) => {
   const name = category.name?.fa || category.name?.en || category.slug;
   const description = category.description?.fa || category.description?.en ||
-    ("محصولات دسته " + name + " را در تیک بوتیک ببینید.");
+    ("قطعات گروه " + name + " را در میبا ببینید.");
   const image = absoluteUrlFor(category.image || "", origin);
   const introImage = image
     ? '<div style="max-width:520px;margin:16px 0">' + imageHtml(category.image || "", name, origin, 'width="1000" height="700"') + '</div>'
@@ -218,11 +220,11 @@ const renderCampaignCards = (campaigns, origin) => {
       const imageBlock = image
         ? '<img src="' + escapeHtml(image) + '" alt="' + escapeHtml(campaign.title || "تصویر کمپین") + '" width="800" height="450" loading="lazy" style="width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px">'
         : "";
-      return '<li style="border:1px solid #e4e0d8;border-radius:14px;padding:12px;background:#fffefa">' +
-        '<a href="' + escapeHtml(href) + '" style="color:#252722;text-decoration:none">' +
+      return '<li style="border:1px solid #e2e5ea;border-radius:14px;padding:12px;background:#ffffff">' +
+        '<a href="' + escapeHtml(href) + '" style="color:#1c1f24;text-decoration:none">' +
         imageBlock + '<h2 style="font-size:18px;line-height:1.7">' + escapeHtml(campaign.title || "پیشنهاد ویژه") + '</h2>' +
-        (campaign.description ? '<p style="font-size:14px;color:#62645c">' + escapeHtml(normalizeSeoText(campaign.description, "", 240)) + '</p>' : "") +
-        '<span style="font-weight:bold;color:#526149">مشاهده پیشنهاد</span></a></li>';
+        (campaign.description ? '<p style="font-size:14px;color:#5a606a">' + escapeHtml(normalizeSeoText(campaign.description, "", 240)) + '</p>' : "") +
+        '<span style="font-weight:bold;color:#c2410c">مشاهده پیشنهاد</span></a></li>';
     }).join("") +
     '</ul></section>';
 };
@@ -234,24 +236,24 @@ const renderCampaignContent = (campaign, origin) => {
     : "";
   const target = isSafeInternalHref(campaign.href) ? campaign.href : "/shop";
   const products = Array.isArray(campaign.productIds) ? campaign.productIds : [];
-  return pageLayout(campaign.title || "پیشنهاد ویژه", campaign.description || "پیشنهادهای ویژه و محصولات منتخب تیک بوتیک.",
+  return pageLayout(campaign.title || "پیشنهاد ویژه", campaign.description || "پیشنهادهای ویژه و قطعات منتخب میبا.",
     imageBlock +
-    '<p><a href="' + escapeHtml(target) + '" style="color:#526149">مشاهده پیشنهاد</a></p>' +
+    '<p><a href="' + escapeHtml(target) + '" style="color:#c2410c">مشاهده پیشنهاد</a></p>' +
     renderProductCards(products, origin));
 };
 
 const renderNotFoundContent = () =>
   '<main lang="fa" dir="rtl" style="max-width:800px;margin:0 auto;padding:48px 16px;text-align:center;font-family:Tahoma,Arial,sans-serif;line-height:1.9">' +
-  '<p style="font-size:13px;color:#68745f">تیک بوتیک · خطای ۴۰۴</p>' +
+  '<p style="font-size:13px;color:#c2410c">میبا · خطای ۴۰۴</p>' +
   '<h1 style="font-size:30px">صفحه موردنظر پیدا نشد</h1>' +
-  '<p>ممکن است محصول حذف شده باشد، کمپین به پایان رسیده باشد یا نشانی صفحه اشتباه باشد.</p>' +
-  '<p><a href="/" style="color:#526149">صفحه اصلی</a> · <a href="/shop" style="color:#526149">مشاهده محصولات</a></p>' +
+  '<p>ممکن است قطعه حذف شده باشد، کمپین به پایان رسیده باشد یا نشانی صفحه اشتباه باشد.</p>' +
+  '<p><a href="/" style="color:#c2410c">صفحه اصلی</a> · <a href="/shop" style="color:#c2410c">مشاهده قطعات</a></p>' +
   '</main>';
 
 const notFoundDocument = (shell, canonicalOrigin, isHead) => {
   const html = renderHtmlShell(shell || MINIMAL_SHELL, {
     title: "صفحه پیدا نشد",
-    description: "این محصول، دسته‌بندی، مجموعه یا کمپین در تیک بوتیک در دسترس نیست.",
+    description: "این قطعه، دسته‌بندی، مجموعه یا کمپین در میبا در دسترس نیست.",
     siteOrigin: canonicalOrigin,
     canonical: "",
     robots: "noindex, nofollow",
@@ -365,7 +367,7 @@ export default async function handler(req, res) {
         throw missing;
       }
       title = String(product.name);
-      description = String(product.description || "جزئیات، قیمت و مشخصات محصول در تیک بوتیک.");
+      description = String(product.description || "جزئیات، کد فنی، قیمت و خودروهای سازگار در میبا.");
       imageValue = product.image || product.images?.[0] || "";
       structuredData.push(buildProductStructuredData({
         product,
@@ -423,13 +425,13 @@ export default async function handler(req, res) {
         category = {
           slug: id,
           name: { fa: fallbackTitle },
-          description: { fa: legacyCategoryDescriptions[id] || ("محصولات دسته " + fallbackTitle + " را در تیک بوتیک ببینید.") },
+          description: { fa: legacyCategoryDescriptions[id] || ("قطعات گروه " + fallbackTitle + " را در میبا ببینید.") },
           image: products[0]?.image || products[0]?.images?.[0] || "",
           isActive: true,
         };
       }
       title = String(category.name?.fa || category.name?.en || id);
-      description = String(category.description?.fa || category.description?.en || ("خرید و فیلتر محصولات دسته " + title + " در تیک بوتیک."));
+      description = String(category.description?.fa || category.description?.en || ("خرید و فیلتر قطعات گروه " + title + " در میبا."));
       imageValue = category.image || products[0]?.image || products[0]?.images?.[0] || "";
       structuredData.push(buildCollectionStructuredData({ title, description, image: imageValue, canonical, products, origin: siteOrigin }));
       structuredData.push(buildBreadcrumbStructuredData([
@@ -448,7 +450,7 @@ export default async function handler(req, res) {
         throw missing;
       }
       title = String(campaign.title || "پیشنهاد ویژه");
-      description = String(campaign.description || "پیشنهادهای ویژه و محصولات منتخب تیک بوتیک.");
+      description = String(campaign.description || "پیشنهادهای ویژه و قطعات منتخب میبا.");
       imageValue = campaign.image || "";
       structuredData.push(buildCollectionStructuredData({
         title,

@@ -27,7 +27,9 @@ const send = async (email, subject, html) => {
   if (!response.ok) throw new Error("Newsletter email provider returned HTTP " + response.status);
 };
 
-const wrap = (body) => '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">' + body + "</div>";
+const wrap = (body) => '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9;color:#1c1f24">' +
+  '<p style="margin:0 0 16px;font-size:22px;font-weight:800;color:#ea580c">MIBA · میبا</p>' + body +
+  '<p style="margin-top:24px;font-size:12px;color:#6b717b">میبا — فروشگاه تخصصی قطعات یدکی خودروهای چینی</p></div>';
 
 export const sendNewsletterConfirmationEmail = (email, token) =>
   send(email, "تأیید عضویت در خبرنامه میبا", wrap(

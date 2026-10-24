@@ -12,13 +12,13 @@ import {
   sendHtml,
 } from "../seo/server-utils.js";
 
-const MINIMAL_SHELL = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>تیک بوتیک</title></head><body><div id="root"></div></body></html>';
+const MINIMAL_SHELL = '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>میبا</title></head><body><div id="root"></div></body></html>';
 
 const notFoundContent = () =>
   '<main lang="fa" dir="rtl" style="max-width:800px;margin:0 auto;padding:48px 16px;text-align:center;font-family:Tahoma,Arial,sans-serif;line-height:1.9">' +
-  '<p style="color:#68745f">تیک بوتیک · خطای ۴۰۴</p><h1 style="font-size:30px">صفحه موردنظر پیدا نشد</h1>' +
+  '<p style="color:#c2410c">میبا · خطای ۴۰۴</p><h1 style="font-size:30px">صفحه موردنظر پیدا نشد</h1>' +
   '<p>نشانی واردشده معتبر نیست یا این صفحه دیگر در دسترس نیست.</p>' +
-  '<p><a href="/" style="color:#526149">صفحه اصلی</a> · <a href="/shop" style="color:#526149">مشاهده محصولات</a></p></main>';
+  '<p><a href="/" style="color:#c2410c">صفحه اصلی</a> · <a href="/shop" style="color:#c2410c">مشاهده قطعات</a></p></main>';
 
 const normalizePath = (value) => {
   if (typeof value !== "string" || !value.trim() || value.length > 300 || /[\r\n?#]/.test(value)) return "";

@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     // Keep still-public legacy category URLs discoverable during the catalogue
     // migration. Only include these slugs when the public API confirms products
     // exist; no fabricated category record or lastmod is added to the sitemap.
-    const legacyCategorySlugs = ["jeans", "t-shirts", "shoes", "glasses", "jackets", "suits", "bags"];
+    const legacyCategorySlugs = ["engine", "brakes", "suspension", "filters", "electrical", "body", "transmission", "cooling"];
     await Promise.all(legacyCategorySlugs.filter((slug) => !activeCategorySlugs.has(slug)).map(async (slug) => {
       try {
         const catalog = await getApiJson(apiBase, "products/category/" + encodeURIComponent(slug) + "?page=1&limit=1");

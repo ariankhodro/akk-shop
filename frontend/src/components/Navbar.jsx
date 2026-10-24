@@ -22,6 +22,8 @@ import {
   FolderTree,
   Moon,
   Sun,
+  Building2,
+  ClipboardList,
 } from "lucide-react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useUserStore } from "../stores/useUserStore";
@@ -29,15 +31,16 @@ import { useCartStore } from "../stores/useCartStore";
 import { useWishlistStore } from "../stores/useWishlistStore";
 import { useCategoryStore } from "../stores/useCategoryStore";
 
-const categories = [
+const defaultCategories = [
   ["", "همه دسته‌بندی‌ها"],
-  ["jeans", "شلوار جین"],
-  ["t-shirts", "تی‌شرت"],
-  ["shoes", "کفش"],
-  ["glasses", "عینک"],
-  ["jackets", "کت و کاپشن"],
-  ["suits", "کت‌وشلوار"],
-  ["bags", "کیف"],
+  ["engine", "قطعات موتوری"],
+  ["brakes", "سیستم ترمز"],
+  ["suspension", "جلوبندی و تعلیق"],
+  ["filters", "فیلترها"],
+  ["electrical", "برق و الکترونیک"],
+  ["body", "بدنه و تزئینات"],
+  ["transmission", "گیربکس و کلاچ"],
+  ["cooling", "سیستم خنک‌کاری"],
 ];
 
 const sortOptions = [
@@ -45,7 +48,7 @@ const sortOptions = [
   ["oldest", "قدیمی‌ترین"],
   ["priceAsc", "ارزان‌ترین"],
   ["priceDesc", "گران‌ترین"],
-  ["nameAsc", "نام محصول (الف تا ی)"],
+  ["nameAsc", "نام قطعه (الف تا ی)"],
 ];
 
 const defaultFilters = {
@@ -58,7 +61,7 @@ const defaultFilters = {
 
 const categoryLabel = (value, dynamicCategories = []) =>
   dynamicCategories.find((category) => category.slug === value)?.name?.fa ||
-  categories.find(([category]) => category === value)?.[1] || value || "مجموعه";
+  defaultCategories.find(([category]) => category === value)?.[1] || value || "قطعات";
 
 const categoryPath = (category, categories) => {
   const byId = new Map(categories.map((item) => [String(item._id), item]));
@@ -77,7 +80,7 @@ const fieldClass =
 
 const readSavedTheme = () => {
   try {
-    return typeof window !== "undefined" && window.localStorage.getItem("tik-boutique-theme") === "dark"
+    return typeof window !== "undefined" && window.localStorage.getItem("miba-theme") === "dark"
       ? "dark"
       : "light";
   } catch {
@@ -88,15 +91,13 @@ const readSavedTheme = () => {
 const Navbar = () => {
   const { user, logout } = useUserStore();
   const isAdmin = user?.role === "admin";
+  const isWholesale = user?.accountType === "wholesale";
+  const wholesaleCompany = user?.wholesaleProfile?.companyName || "";
   const { cart } = useCartStore();
   const { items: savedProducts } = useWishlistStore();
   const { categories: dynamicCategories, fetchCategories } = useCategoryStore();
   const categories = useMemo(() => {
-    if (!dynamicCategories.length) return [
-      ["", "همه دسته‌بندی‌ها"], ["jeans", "شلوار جین"], ["t-shirts", "تی‌شرت"],
-      ["shoes", "کفش"], ["glasses", "عینک"], ["jackets", "کت و کاپشن"],
-      ["suits", "کت‌وشلوار"], ["bags", "کیف"],
-    ];
+    if (!dynamicCategories.length) return defaultCategories;
     return [
       ["", "همه دسته‌بندی‌ها"],
       ...dynamicCategories.filter((category) => category.showInNavigation !== false)
@@ -154,9 +155,9 @@ const Navbar = () => {
     root.dataset.theme = theme;
     root.style.colorScheme = theme;
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-    if (themeColorMeta) themeColorMeta.setAttribute("content", theme === "dark" ? "#090a0c" : "#f7f5f0");
+    if (themeColorMeta) themeColorMeta.setAttribute("content", theme === "dark" ? "#090a0c" : "#f5f6f8");
     try {
-      window.localStorage.setItem("tik-boutique-theme", theme);
+      window.localStorage.setItem("miba-theme", theme);
     } catch {
       // Theme still applies for this session when browser storage is unavailable.
     }
@@ -491,7 +492,7 @@ const Navbar = () => {
       <>
       <p role="status" className="sr-only">
         {searchSuggestions.loading
-          ? "در حال جست‌وجوی محصولات"
+          ? "در حال جست‌وجوی قطعات"
           : hasSuggestions
             ? `${new Intl.NumberFormat("fa-IR").format(suggestionOptionCount)} پیشنهاد موجود است`
             : "پیشنهادی پیدا نشد"}
@@ -500,7 +501,7 @@ const Navbar = () => {
         id={`${surface}-search-suggestions`}
         role="listbox"
         aria-label="پیشنهادهای جست‌وجو"
-        className={`${surface === "desktop" ? "absolute left-0 right-0 top-[calc(100%+0.65rem)] z-[60]" : "relative mt-2"} max-h-80 overflow-y-auto rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2 shadow-[0_20px_55px_-24px_rgba(37,39,34,0.35)]`}
+        className={`${surface === "desktop" ? "absolute left-0 right-0 top-[calc(100%+0.65rem)] z-[60]" : "relative mt-2"} max-h-80 overflow-y-auto rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2 shadow-[0_20px_55px_-24px_rgba(28,31,36,0.35)]`}
       >
         {categorySuggestions.length > 0 && (
           <div className="pb-2">
@@ -525,8 +526,8 @@ const Navbar = () => {
         )}
 
         {searchSuggestions.products.length > 0 && (
-          <div className={categorySuggestions.length ? "border-t border-[#eeeae2] pt-2" : ""}>
-            <p className="px-3 pb-1 pt-1 text-[11px] font-semibold text-[var(--ui-muted)]">محصولات</p>
+          <div className={categorySuggestions.length ? "border-t border-[#eceef2] pt-2" : ""}>
+            <p className="px-3 pb-1 pt-1 text-[11px] font-semibold text-[var(--ui-muted)]">قطعات</p>
             {searchSuggestions.products.map((product, index) => {
               const optionIndex = categorySuggestions.length + index;
               return (
@@ -558,7 +559,7 @@ const Navbar = () => {
         )}
 
         {searchSuggestions.loading && (
-          <p role="status" className="px-3 py-3 text-sm text-[var(--ui-muted)]">در حال جست‌وجوی محصولات…</p>
+          <p role="status" className="px-3 py-3 text-sm text-[var(--ui-muted)]">در حال جست‌وجوی قطعات…</p>
         )}
         {searchSuggestions.error && !searchSuggestions.loading && (
           <p role="status" className="px-3 py-3 text-sm text-[var(--ui-muted)]">پیشنهادها موقتاً در دسترس نیستند؛ جست‌وجو را ادامه دهید.</p>
@@ -613,7 +614,7 @@ const Navbar = () => {
           (isRoot ? "px-2 py-1" : "rounded-xl px-2 py-0.5 hover:bg-[var(--ui-hover)]") +
           (isActive ? " bg-[var(--ui-hover)]" : "")}
         >
-          {!isRoot && <span aria-hidden="true" className="absolute right-0 top-1/2 h-px w-3 bg-[#c7c3b9]" />}
+          {!isRoot && <span aria-hidden="true" className="absolute right-0 top-1/2 h-px w-3 bg-[#c3c8cf]" />}
           <Link
             to={"/category/" + encodeURIComponent(category.slug)}
             onClick={() => setMobileMenuOpen(false)}
@@ -623,7 +624,7 @@ const Navbar = () => {
           >
             <span className={"inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg " +
               (isRoot ? "bg-[var(--ui-surface-raised)] text-[var(--ui-accent)]" : "text-[var(--ui-muted)]")}>
-              {isRoot ? <FolderTree size={16} aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-[#a0a195]" />}
+              {isRoot ? <FolderTree size={16} aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-[#a0a5ad]" />}
             </span>
             <span className="min-w-0 flex-1 truncate">{label}</span>
             {isRoot && children.length > 0 && (
@@ -814,12 +815,12 @@ const Navbar = () => {
   };
 
   const renderFilterActions = () => (
-    <div className="mt-5 flex gap-2 border-t border-[#eeeae2] pt-4">
+    <div className="mt-5 flex gap-2 border-t border-[#eceef2] pt-4">
       <button
         type="submit"
         className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--ui-strong-surface)] px-4 py-2 text-sm font-semibold text-[var(--ui-inverse-text)] transition hover:bg-[var(--ui-strong-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ui-focus)]"
       >
-        نمایش محصولات
+        نمایش قطعات
         <Search size={16} aria-hidden="true" />
       </button>
       <button
@@ -836,7 +837,7 @@ const Navbar = () => {
     <>
       <header
         dir="rtl"
-        className="fixed inset-x-0 top-0 z-40 w-full border-b border-[var(--ui-border)] bg-[#f7f5f0]/95 text-[var(--ui-text)] shadow-[0_8px_24px_-22px_rgba(37,39,34,0.45)] backdrop-blur-xl"
+        className="fixed inset-x-0 top-0 z-40 w-full border-b border-[var(--ui-border)] bg-[#f5f6f8]/95 text-[var(--ui-text)] shadow-[0_8px_24px_-22px_rgba(28,31,36,0.45)] backdrop-blur-xl"
       >
         <div className="bg-[var(--ui-strong-surface)] text-[var(--ui-inverse-text)]">
           <div className="mx-auto flex min-h-9 max-w-[1920px] items-center justify-center gap-2 px-3 py-2 text-center sm:justify-between sm:px-6 lg:px-8 min-[1680px]:px-12">
@@ -856,7 +857,7 @@ const Navbar = () => {
               to="/shop"
               className="hidden shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold text-[var(--ui-accent)] transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:inline-flex"
             >
-              مشاهده محصولات
+              مشاهده قطعات
               <ChevronLeft size={14} aria-hidden="true" />
             </Link>
           </div>
@@ -909,12 +910,18 @@ const Navbar = () => {
                 <div
                   id="account-menu"
                   dir="rtl"
-                  className="absolute right-0 top-[calc(100%+0.75rem)] z-[70] hidden w-64 overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2 shadow-[0_24px_70px_-24px_rgba(37,39,34,0.35)] lg:block lg:left-0 lg:right-auto"
+                  className="absolute right-0 top-[calc(100%+0.75rem)] z-[70] hidden w-64 overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-2 shadow-[0_24px_70px_-24px_rgba(28,31,36,0.35)] lg:block lg:left-0 lg:right-auto"
                 >
-                  <div className="border-b border-[#eeeae2] px-3 py-3">
+                  <div className="border-b border-[#eceef2] px-3 py-3">
                     <p className="text-sm font-bold text-[var(--ui-text)]">حساب کاربری</p>
                     {user && (
                       <p className="mt-1 break-words text-xs text-[var(--ui-muted)]">{user.name || user.email || "کاربر فروشگاه"}</p>
+                    )}
+                    {isWholesale && (
+                      <span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-[var(--ui-accent-soft)] px-2.5 py-1 text-[11px] font-bold text-[var(--ui-accent)]">
+                        <Building2 size={13} aria-hidden="true" />
+                        <span className="truncate">حساب همکار (عمده){wholesaleCompany ? " · " + wholesaleCompany : ""}</span>
+                      </span>
                     )}
                   </div>
 
@@ -937,6 +944,14 @@ const Navbar = () => {
                           <UserRound size={17} aria-hidden="true" />
                           ایجاد حساب کاربری
                         </Link>
+                        <Link
+                          to="/login?wholesale=1"
+                          onClick={() => setAccountMenuOpen(false)}
+                          className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--ui-accent)] transition hover:bg-[var(--ui-surface-raised)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ui-focus)]"
+                        >
+                          <Building2 size={17} aria-hidden="true" />
+                          ورود همکاران
+                        </Link>
                       </>
                     ) : (
                       <>
@@ -956,6 +971,16 @@ const Navbar = () => {
                           <Truck size={17} aria-hidden="true" />
                           سفارش‌های من و رهگیری
                         </Link>
+                        {isWholesale && (
+                          <Link
+                            to="/wholesale/quick-order"
+                            onClick={() => setAccountMenuOpen(false)}
+                            className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-[var(--ui-accent)] transition hover:bg-[var(--ui-surface-raised)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ui-focus)]"
+                          >
+                            <ClipboardList size={17} aria-hidden="true" />
+                            سفارش سریع عمده
+                          </Link>
+                        )}
                         {isAdmin && (
                           <Link
                             to="/secret-dashboard"
@@ -983,10 +1008,12 @@ const Navbar = () => {
 
             <Link
               to="/"
-              aria-label="صفحه اصلی تیک بوتیک"
-              className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 shrink-0 items-center justify-center whitespace-nowrap font-serif text-2xl font-semibold tracking-tight text-[var(--ui-text)] transition hover:text-[var(--ui-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ui-focus)] min-[1680px]:static min-[1680px]:col-start-2 min-[1680px]:row-start-1 min-[1680px]:translate-x-0 min-[1680px]:justify-self-center"
+              aria-label="صفحه اصلی میبا"
+              className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 shrink-0 items-center justify-center gap-2 whitespace-nowrap text-2xl font-extrabold tracking-tight text-[var(--ui-text)] transition hover:text-[var(--ui-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ui-focus)] min-[1680px]:static min-[1680px]:col-start-2 min-[1680px]:row-start-1 min-[1680px]:translate-x-0 min-[1680px]:justify-self-center"
             >
-              تیک بوتیک
+              <img src="/favicon.svg" alt="" width="36" height="36" className="h-9 w-9 rounded-xl" />
+              <span dir="ltr" className="tracking-[0.12em]">MIBA</span>
+              <span className="hidden text-base font-bold text-[var(--ui-accent)] sm:inline">میبا</span>
             </Link>
 
             <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:gap-3 md:order-last md:basis-full md:justify-start min-[1680px]:order-none min-[1680px]:basis-auto min-[1680px]:col-start-1 min-[1680px]:row-start-1 min-[1680px]:w-full min-[1680px]:flex-initial min-[1680px]:justify-self-stretch">
@@ -1005,7 +1032,7 @@ const Navbar = () => {
                   {mobileMenuOpen ? <X size={19} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
                 </button>
                 <NavLink to="/" end className={linkClass}>صفحه اصلی</NavLink>
-                <NavLink to="/shop" className={linkClass}>محصولات</NavLink>
+                <NavLink to="/shop" className={linkClass}>قطعات</NavLink>
                 <NavLink to="/wishlist" className={linkClass}><Heart size={15} aria-hidden="true" />علاقه‌مندی‌ها{savedProducts.length > 0 && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--ui-accent)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--ui-button-text)]">{new Intl.NumberFormat("fa-IR").format(savedProducts.length)}</span>}</NavLink>
               </nav>
 
@@ -1016,8 +1043,8 @@ const Navbar = () => {
                 <form
                   onSubmit={handleDesktopSearch}
                   role="search"
-                  aria-label="جست‌وجوی محصولات"
-                  className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-1 shadow-sm transition focus-within:border-[var(--ui-focus)] focus-within:ring-4 focus-within:ring-[#68745f]/10"
+                  aria-label="جست‌وجوی قطعات"
+                  className="flex min-h-12 min-w-0 flex-1 items-center gap-1 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-1 shadow-sm transition focus-within:border-[var(--ui-focus)] focus-within:ring-4 focus-within:ring-[#ea580c]/10"
                 >
                   <Search size={18} className="mr-2 shrink-0 text-[var(--ui-muted)]" aria-hidden="true" />
                   <input
@@ -1026,10 +1053,10 @@ const Navbar = () => {
                     onFocus={() => { setDesktopFiltersOpen(false); setActiveSearchSurface("desktop"); }}
                     onKeyDown={handleSuggestionKeyDown}
                     onChange={(event) => updateFilter("q", event.target.value)}
-                    aria-label="نام یا توضیحات محصول"
+                    aria-label="نام قطعه، کد فنی یا خودرو"
                     {...comboboxProps("desktop")}
                     autoComplete="off"
-                    placeholder="جست‌وجوی محصولات..."
+                    placeholder="نام قطعه، کد فنی یا خودرو…"
                     className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-[var(--ui-text)] outline-none placeholder:text-[var(--ui-muted)]"
                   />
                   <button
@@ -1073,10 +1100,10 @@ const Navbar = () => {
                   <form
                     id="desktop-product-filters"
                     onSubmit={applyFilters}
-                    className="absolute left-0 right-auto top-[calc(100%+0.75rem)] z-50 max-h-[min(70vh,34rem)] w-[27rem] overflow-y-auto rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-5 shadow-[0_24px_70px_-24px_rgba(37,39,34,0.35)]"
+                    className="absolute left-0 right-auto top-[calc(100%+0.75rem)] z-50 max-h-[min(70vh,34rem)] w-[27rem] overflow-y-auto rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-5 shadow-[0_24px_70px_-24px_rgba(28,31,36,0.35)]"
                   >
                     <div className="mb-4">
-                      <p className="text-sm font-bold text-[var(--ui-text)]">فیلتر محصولات</p>
+                      <p className="text-sm font-bold text-[var(--ui-text)]">فیلتر قطعات</p>
                       <p className="mt-1 text-xs text-[var(--ui-muted)]">نتیجه‌ها را دقیق‌تر و سریع‌تر پیدا کنید.</p>
                     </div>
                     {renderFilterFields()}
@@ -1089,8 +1116,8 @@ const Navbar = () => {
                 type="button"
                 onClick={() => setMobileSearchOpen(true)}
                 aria-label={activeFilterCount > 0
-                  ? `باز کردن جست‌وجو و فیلتر محصولات، ${new Intl.NumberFormat("fa-IR").format(activeFilterCount)} فیلتر فعال`
-                  : "باز کردن جست‌وجو و فیلتر محصولات"}
+                  ? `باز کردن جست‌وجو و فیلتر قطعات، ${new Intl.NumberFormat("fa-IR").format(activeFilterCount)} فیلتر فعال`
+                  : "باز کردن جست‌وجو و فیلتر قطعات"}
                 className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border)] bg-[var(--ui-surface)] text-[var(--ui-text-strong)] shadow-sm transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-raised)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ui-focus)] md:hidden"
               >
                 <Search size={18} aria-hidden="true" />
@@ -1111,22 +1138,23 @@ const Navbar = () => {
             type="button"
             aria-label="بستن منوی فروشگاه"
             onClick={() => setMobileMenuOpen(false)}
-            className="absolute inset-0 h-full w-full bg-[#252722]/45 backdrop-blur-sm"
+            className="absolute inset-0 h-full w-full bg-[#1c1f24]/45 backdrop-blur-sm"
           />
           <aside
             role="dialog"
             aria-modal="true"
             aria-labelledby="store-nav-heading"
-            className="absolute inset-y-0 right-0 flex h-[100dvh] w-[min(92vw,28rem)] flex-col border-l border-[var(--ui-border)] bg-[var(--ui-canvas)] shadow-[0_24px_80px_-20px_rgba(37,39,34,0.42)] animate-[searchPanelIn_180ms_ease-out]"
+            className="absolute inset-y-0 right-0 flex h-[100dvh] w-[min(92vw,28rem)] flex-col border-l border-[var(--ui-border)] bg-[var(--ui-canvas)] shadow-[0_24px_80px_-20px_rgba(28,31,36,0.42)] animate-[searchPanelIn_180ms_ease-out]"
           >
             <div className="flex items-center justify-between gap-4 border-b border-[var(--ui-border)] px-5 py-4">
               <div>
                 <Link
                   to="/"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="font-serif text-2xl font-semibold tracking-tight text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ui-focus)]"
+                  className="inline-flex items-center gap-2 text-2xl font-extrabold tracking-tight text-[var(--ui-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ui-focus)]"
                 >
-                  تیک بوتیک
+                  <img src="/favicon.svg" alt="" width="32" height="32" className="h-8 w-8 rounded-lg" />
+                  <span dir="ltr" className="tracking-[0.12em]">MIBA</span>
                 </Link>
                 <p id="store-nav-heading" className="mt-1 text-xs text-[var(--ui-muted)]">منوی فروشگاه</p>
               </div>
@@ -1153,16 +1181,22 @@ const Navbar = () => {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-[var(--ui-accent)]">حساب کاربری شما</p>
-                      <p className="mt-1 break-words text-sm font-bold text-[var(--ui-text)]">{user.name || user.email || "کاربر تیک بوتیک"}</p>
+                      <p className="mt-1 break-words text-sm font-bold text-[var(--ui-text)]">{user.name || user.email || "کاربر میبا"}</p>
                       {isAdmin && <span className="mt-2 inline-flex rounded-full bg-[var(--ui-strong-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--ui-inverse-text)]">مدیر فروشگاه</span>}
+                      {isWholesale && (
+                        <span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-[var(--ui-accent-soft)] px-2.5 py-1 text-[11px] font-bold text-[var(--ui-accent)]">
+                          <Building2 size={13} aria-hidden="true" />
+                          <span className="truncate">حساب همکار (عمده){wholesaleCompany ? " · " + wholesaleCompany : ""}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </section>
               ) : (
                 <section className="rounded-2xl bg-[var(--ui-strong-surface)] p-4 text-[var(--ui-inverse-text)]">
-                  <p className="text-xs font-semibold tracking-wide text-[var(--ui-accent)]">به تیک بوتیک خوش آمدید</p>
-                  <h2 className="mt-2 font-serif text-xl font-medium">استایل دلخواهتان را پیدا کنید.</h2>
-                  <p className="mt-2 text-xs leading-5 text-white/70">وارد حساب شوید یا برای تجربه خرید شخصی‌تر ثبت‌نام کنید.</p>
+                  <p className="text-xs font-semibold tracking-wide text-[var(--ui-accent)]">به میبا خوش آمدید</p>
+                  <h2 className="mt-2 text-xl font-bold">قطعه مناسب خودروی خود را پیدا کنید.</h2>
+                  <p className="mt-2 text-xs leading-5 text-white/70">وارد حساب شوید یا برای پیگیری سفارش‌ها ثبت‌نام کنید.</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <Link
                       to="/login"
@@ -1181,6 +1215,14 @@ const Navbar = () => {
                       ثبت‌نام
                     </Link>
                   </div>
+                  <Link
+                    to="/login?wholesale=1"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--ui-accent)]/60 px-3 py-2 text-sm font-semibold text-[var(--ui-accent)] transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  >
+                    <Building2 size={16} aria-hidden="true" />
+                    ورود همکاران (عمده)
+                  </Link>
                 </section>
               )}
 
@@ -1204,7 +1246,7 @@ const Navbar = () => {
                     className="flex min-h-[4.25rem] items-center gap-3 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] px-3 py-3 text-sm font-semibold text-[var(--ui-text-strong)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ui-focus)]"
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--ui-surface-raised)] text-[var(--ui-accent)]"><ShoppingBag size={18} aria-hidden="true" /></span>
-                    همه محصولات
+                    همه قطعات
                   </Link>
                   <Link
                     to="/wishlist"
@@ -1271,6 +1313,17 @@ const Navbar = () => {
                       <ChevronLeft size={15} className="mr-auto text-[var(--ui-accent)]" aria-hidden="true" />
                     </Link>
                   )}
+                  {isWholesale && (
+                    <Link
+                      to="/wholesale/quick-order"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex min-h-12 items-center gap-3 rounded-xl bg-[var(--ui-accent-soft)] px-3 py-3 text-sm font-semibold text-[var(--ui-accent)] transition hover:bg-[var(--ui-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ui-focus)]"
+                    >
+                      <ClipboardList size={17} aria-hidden="true" />
+                      سفارش سریع عمده
+                      <ChevronLeft size={15} className="mr-auto text-[var(--ui-accent)]" aria-hidden="true" />
+                    </Link>
+                  )}
                   {isAdmin && (
                     <Link
                       to="/secret-dashboard?tab=categories"
@@ -1306,8 +1359,8 @@ const Navbar = () => {
                 </section>
               )}
             </div>
-            <div className="border-t border-[var(--ui-border)] bg-[#fffefa]/70 px-5 py-3 text-center text-[11px] text-[var(--ui-muted)]">
-              خرید آسان، استایل ماندگار
+            <div className="border-t border-[var(--ui-border)] bg-[#ffffff]/70 px-5 py-3 text-center text-[11px] text-[var(--ui-muted)]">
+              قطعات یدکی خودروهای چینی؛ خرده و عمده
             </div>
           </aside>
         </div>
@@ -1322,20 +1375,20 @@ const Navbar = () => {
             type="button"
             aria-label="بستن جست‌وجو"
             onClick={() => { setMobileSearchOpen(false); setActiveSearchSurface(null); }}
-            className="absolute inset-0 h-full w-full bg-[#252722]/35 backdrop-blur-md"
+            className="absolute inset-0 h-full w-full bg-[#1c1f24]/35 backdrop-blur-md"
           />
 
           <section
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-search-heading"
-            className="relative z-10 max-h-[min(88dvh,48rem)] w-full max-w-lg animate-[searchPanelIn_180ms_ease-out] overflow-y-auto rounded-[1.75rem] border border-white/70 bg-[#fffefa]/95 p-4 shadow-[0_32px_100px_-28px_rgba(37,39,34,0.5)] backdrop-blur-2xl sm:p-6"
+            className="relative z-10 max-h-[min(88dvh,48rem)] w-full max-w-lg animate-[searchPanelIn_180ms_ease-out] overflow-y-auto rounded-[1.75rem] border border-white/70 bg-[#ffffff]/95 p-4 shadow-[0_32px_100px_-28px_rgba(28,31,36,0.5)] backdrop-blur-2xl sm:p-6"
           >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <p className="mb-1 text-xs font-semibold tracking-[0.16em] text-[var(--ui-accent)]">جست‌وجوی هوشمند</p>
                 <h2 id="mobile-search-heading" className="font-serif text-2xl font-medium text-[var(--ui-text)]">دنبال چه چیزی هستید؟</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--ui-muted)]">محصولات را جست‌وجو و نتیجه‌ها را فیلتر کنید.</p>
+                <p className="mt-1 text-sm leading-6 text-[var(--ui-muted)]">قطعات را جست‌وجو و نتیجه‌ها را فیلتر کنید.</p>
               </div>
               <button
                 type="button"
@@ -1348,8 +1401,8 @@ const Navbar = () => {
             </div>
 
             <form onSubmit={applyFilters}>
-              <label htmlFor="mobile-product-search" className="sr-only">نام یا توضیحات محصول</label>
-              <div className="mb-5 flex min-h-12 items-center gap-2 rounded-2xl border border-[var(--ui-border-strong)] bg-[var(--ui-surface)] p-1.5 transition focus-within:border-[var(--ui-accent)] focus-within:ring-4 focus-within:ring-[#68745f]/10">
+              <label htmlFor="mobile-product-search" className="sr-only">نام قطعه، کد فنی یا خودرو</label>
+              <div className="mb-5 flex min-h-12 items-center gap-2 rounded-2xl border border-[var(--ui-border-strong)] bg-[var(--ui-surface)] p-1.5 transition focus-within:border-[var(--ui-accent)] focus-within:ring-4 focus-within:ring-[#ea580c]/10">
                 <Search size={19} className="mr-2 shrink-0 text-[var(--ui-accent)]" aria-hidden="true" />
                 <input
                   ref={mobileSearchInputRef}
@@ -1361,7 +1414,7 @@ const Navbar = () => {
                   onChange={(event) => updateFilter("q", event.target.value)}
                   {...comboboxProps("mobile")}
                   autoComplete="off"
-                  placeholder="مثلاً کت، کیف، شلوار جین..."
+                  placeholder="نام قطعه، کد فنی یا خودرو…"
                   className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-[var(--ui-text)] outline-none placeholder:text-[var(--ui-muted)]"
                 />
               </div>
