@@ -1,11 +1,6 @@
-const persianDigitMap = "۰۱۲۳۴۵۶۷۸۹";
-const arabicDigitMap = "٠١٢٣٤٥٦٧٨٩";
+import { normalizeDigits } from "./normalize-digits.js";
 
-export const normalizeDigits = (value) =>
-  String(value ?? "")
-    .normalize("NFKC")
-    .replace(/[۰-۹]/g, (digit) => String(persianDigitMap.indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String(arabicDigitMap.indexOf(digit)));
+export { normalizeDigits };
 
 export const normalizePersianText = (value) =>
   normalizeDigits(value)

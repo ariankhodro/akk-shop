@@ -1,3 +1,5 @@
+import { normalizeDigits } from "./normalize-digits.js";
+
 const MIN_PASSWORD_CHARACTERS = 12;
 const MAX_BCRYPT_INPUT_BYTES = 72;
 
@@ -18,9 +20,7 @@ const hasLongPassphraseComplexity = (password) => {
 };
 
 const containsCommonPasswordPattern = (password) => {
-  const normalized = password.toLowerCase().normalize("NFKC")
-    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+  const normalized = normalizeDigits(password.toLowerCase())
     .replace(/[^a-z0-9]/g, "");
   const commonFragments = ["password", "passw0rd", "pssw0rd", "qwerty", "asdfgh", "zxcvbn", "qazwsx", "1q2w3e", "letmein", "welcome", "changeme", "iloveyou", "dinosaur", "monkey", "dragon", "football", "baseball", "princess", "superman", "sunshine", "starwars", "batman", "michael", "jessica", "secret", "summer", "winter", "spring", "autumn", "admin", "administrator", "master", "hello", "family", "freedom", "whatever", "computer", "internet", "123456", "654321", "abc123"];
   if (commonFragments.some((pattern) => normalized.includes(pattern))) return true;
