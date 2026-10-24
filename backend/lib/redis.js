@@ -24,5 +24,6 @@ export const redis = redisClient || {
   set: unavailable,
   del: unavailable,
   eval: unavailable,
+  ttl: unavailable,
   ping: unavailable,
 };

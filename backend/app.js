@@ -20,6 +20,9 @@ import adminRoutes from "./routes/admin.route.js";
 import serviceCaseRoutes from "./routes/service-case.route.js";
 import { apiRateLimit } from "./middleware/rate-limit.middleware.js";
 import { browserOriginAndCors, securityHeaders } from "./middleware/security.middleware.js";
+import { requestContext } from "./middleware/request-context.middleware.js";
+import { trustProxyHops } from "./lib/config.js";
+import { logger, errorFields } from "./lib/logger.js";
 
 const app = express();
 
@@ -34,7 +37,10 @@ const safeErrorMetadata = (error) => ({
 });
 
 app.disable("x-powered-by");
-app.set("trust proxy", 1);
+// Number of trusted reverse-proxy hops (TRUST_PROXY_HOPS, default 1). Too many hops
+// lets clients spoof req.ip; zero hops ignores X-Forwarded-For entirely.
+app.set("trust proxy", trustProxyHops());
+app.use(requestContext);
 app.use(securityHeaders);
 app.use(browserOriginAndCors);
 
@@ -117,8 +123,8 @@ app.use((error, _req, res, next) => {
   if (error instanceof SyntaxError && (error.status === 400 || error.statusCode === 400) && "body" in error) {
     return res.status(400).json({ message: "Invalid JSON request body" });
   }
-  console.error("Unhandled API error:", error?.message || error);
-  return res.status(500).json({ message: "Internal server error" });
+  logger.error("unhandled_api_error", { requestId: _req.id, method: _req.method, path: _req.path, ...errorFields(error) });
+  return res.status(500).json({ message: "Internal server error", requestId: _req.id });
 });
 
 export default app;

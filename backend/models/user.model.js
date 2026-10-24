@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { getPasswordPolicyError } from "../lib/password-policy.js";
+import { PERMISSIONS, LEGACY_WILDCARD, ROLE_PRESET_NAMES } from "../lib/rbac.js";
+
+const BCRYPT_COST = Number.isInteger(Number(process.env.BCRYPT_COST)) && Number(process.env.BCRYPT_COST) >= 10 && Number(process.env.BCRYPT_COST) <= 14 ? Number(process.env.BCRYPT_COST) : 12;
 
 const shippingAddressFields = {
  recipientName: { type: String, trim: true, minlength: 2, maxlength: 100, required: true },
@@ -25,6 +28,9 @@ const userSchema = new mongoose.Schema(
 		name: {
 			type: String,
 			required: [true, "Name is required"],
+			trim: true,
+			minlength: 2,
+			maxlength: 100,
 		},
 		email: {
 			type: String,
@@ -32,6 +38,8 @@ const userSchema = new mongoose.Schema(
 			unique: true,
 			lowercase: true,
 			trim: true,
+			maxlength: 254,
+			match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Email is invalid"],
 		},
 		password: {
 			type: String,
@@ -67,11 +75,19 @@ const userSchema = new mongoose.Schema(
 			enum: ["customer", "admin"],
 			default: "customer",
 		},
-    // Undefined preserves legacy administrator access until permissions are configured.
+    // Explicit permission list. Missing or empty grants nothing (deny by default).
+    // The legacy wildcard is still accepted by the schema only so old documents
+    // can be loaded and migrated; it is ignored at authorization time.
     permissions: {
-      type: [{ type: String, enum: ["catalogue.manage", "orders.manage", "customers.manage", "support.manage", "reports.view", "settings.manage", "inventory.manage", "audit.view", "system.view", "roles.manage", "marketing.manage", "*"] }],
+      type: [{ type: String, enum: [...PERMISSIONS, LEGACY_WILDCARD] }],
       default: undefined,
     },
+    // Informational label of the preset the permissions were derived from.
+    adminRole: { type: String, enum: ROLE_PRESET_NAMES, default: undefined },
+    // Owner tier: set only by the bootstrap script or by an existing owner.
+    isOwner: { type: Boolean, default: false },
+    // Incremented to revoke every outstanding access and refresh token.
+    tokenVersion: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
 	},
 	{
@@ -84,7 +100,7 @@ userSchema.pre("save", async function (next) {
 	if (!this.isModified("password")) return next();
 
 	try {
-		const salt = await bcrypt.genSalt(10);
+		const salt = await bcrypt.genSalt(BCRYPT_COST);
 		this.password = await bcrypt.hash(this.password, salt);
 		next();
 	} catch (error) {
@@ -94,6 +110,15 @@ userSchema.pre("save", async function (next) {
 
 userSchema.methods.comparePassword = async function (password) {
 	return bcrypt.compare(password, this.password);
+};
+
+// Spend the same bcrypt time for unknown accounts so response time does not
+// reveal whether an email is registered.
+let dummyHashPromise = null;
+userSchema.statics.burnPasswordCheck = async function (password) {
+	dummyHashPromise ??= bcrypt.hash("timing-equalisation-placeholder", BCRYPT_COST);
+	await bcrypt.compare(typeof password === "string" ? password : "", await dummyHashPromise);
+	return false;
 };
 
 const User = mongoose.model("User", userSchema);

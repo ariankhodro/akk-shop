@@ -1,21 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-export const hasAdministratorManagementAccess = (role, isActive, permissions) =>
-  role === "admin" &&
-  isActive !== false &&
-  (!Array.isArray(permissions) || permissions.includes("*") || permissions.includes("roles.manage"));
-
-export const canPreserveAdministratorManagement = ({
-  nextRole,
-  nextActive,
-  nextPermissions,
-  otherActiveAdmins = [],
-}) => hasAdministratorManagementAccess(nextRole, nextActive, nextPermissions) ||
-  otherActiveAdmins.some((administrator) =>
-    hasAdministratorManagementAccess("admin", true, administrator.permissions)
-  );
-
-
 const ADMIN_ACCESS_LOCK_KEY = "lock:admin-access:mutation";
 const ADMIN_ACCESS_LOCK_TTL_MS = 60_000;
 const ADMIN_ACCESS_LOCK_WAIT_MS = 8_000;
