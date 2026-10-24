@@ -8,7 +8,6 @@ import sitemapProductsHandler from "../../api/sitemap-products.js";
 import sitemapStaticHandler from "../../api/sitemap-static.js";
 
 const SHOP_ORIGIN = "https://shop.example";
-const PREVIEW_ORIGIN = "https://preview.example";
 const API_ORIGIN = "https://api.example";
 const PRODUCT_ID = "64f123456789abcdef123456";
 const SECOND_PRODUCT_ID = "64f123456789abcdef123457";
