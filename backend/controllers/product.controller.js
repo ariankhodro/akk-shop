@@ -3,7 +3,8 @@ import cloudinary from "../lib/cloudinary.js";
 import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
 import Order from "../models/order.model.js";
-import { normalizePersianText, escapeSearchRegex } from "../lib/persian-search.js";
+import { normalizePersianText, escapeSearchRegex, buildNormalizedProductSearchText } from "../lib/persian-search.js";
+import { applyStockDelta, stockConflictError } from "../lib/inventory-stock.js";
 import { recordAuditEvent } from "../lib/audit-log.js";
 
 const idOf = (value) => value == null ? "" : String(value);
@@ -467,7 +468,7 @@ export const createProduct = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    let product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     const body = req.body || {};
@@ -597,21 +598,70 @@ export const updateProduct = async (req, res) => {
     });
     const before = snapshot(product);
 
-    product.name = name;
-    product.description = description;
-    product.price = numericPrice;
-    product.image = uploadedImages[0] || "";
-    product.images = uploadedImages;
-    product.category = productCategory;
-    product.categoryId = categoryRecord?._id || null;
-    product.attributes = normalizedAttributes.values || {};
-    product.sizes = normalizedSizes;
-    product.colors = normalizedColors;
-    product.variants = normalizedVariants;
-    product.fit = normalizedFit;
-    product.sizeChart = normalizedSizeChart;
-    product.stock = normalizedVariants.length ? null : numericStock;
-    await product.save();
+    // Stock is applied as a delta against the live document and written with a
+    // conditional filter, so a reservation made while the admin was editing (or between
+    // our read and write) is never erased (BIZ-5). The baseline is what the admin saw:
+    // an explicit stockBaseline / variants[].stockBaseline from the form, else the value
+    // read at the start of this request.
+    const explicitNumber = (value) => (value === "" || value === null || value === undefined || !Number.isSafeInteger(Number(value))) ? null : Number(value);
+    const firstRead = product.toObject();
+    const variantKey = (variant) => (variant.size || "") + "::" + (variant.color || "");
+    const firstVariantStock = new Map((firstRead.variants || []).map((variant) => [variantKey(variant), variant.stock]));
+    const explicitVariantBaseline = new Map();
+    (Array.isArray(body.variants) ? body.variants : []).forEach((variant, index) => {
+      const baseline = explicitNumber(variant?.stockBaseline);
+      if (baseline !== null && normalizedVariants[index]) explicitVariantBaseline.set(variantKey(normalizedVariants[index]), baseline);
+    });
+    const explicitStockBaseline = explicitNumber(body.stockBaseline);
+    const searchSource = {
+      name, description, category: productCategory, sizes: normalizedSizes, colors: normalizedColors,
+      fit: normalizedFit, attributes: normalizedAttributes.values || {},
+    };
+
+    let saved = null;
+    for (let attempt = 0; attempt < 6 && !saved; attempt += 1) {
+      const live = attempt === 0 ? firstRead : await Product.findById(product._id).lean();
+      if (!live) return res.status(404).json({ message: "Product not found" });
+      const liveVariants = live.variants || [];
+      const nextVariants = normalizedVariants.map((variant) => {
+        const key = variantKey(variant);
+        const liveVariant = liveVariants.find((entry) => variantKey(entry) === key);
+        const baseline = explicitVariantBaseline.get(key) ?? firstVariantStock.get(key);
+        const stock = liveVariant ? applyStockDelta(liveVariant.stock, baseline, variant.stock) : variant.stock;
+        return { size: variant.size, color: variant.color, stock };
+      });
+      let nextStock = null;
+      if (!normalizedVariants.length && numericStock !== null) {
+        nextStock = applyStockDelta(live.stock, explicitStockBaseline ?? firstRead.stock, numericStock);
+      }
+      if (nextVariants.some((variant) => variant.stock < 0) || (nextStock !== null && nextStock < 0)) {
+        throw stockConflictError("STOCK_BELOW_RESERVED");
+      }
+      const filter = { _id: product._id, stock: live.stock ?? null };
+      if (liveVariants.length) filter.variants = liveVariants;
+      else filter.$or = [{ variants: { $exists: false } }, { variants: { $size: 0 } }];
+      saved = await Product.findOneAndUpdate(filter, {
+        $set: {
+          name,
+          description,
+          price: numericPrice,
+          image: uploadedImages[0] || "",
+          images: uploadedImages,
+          category: productCategory,
+          categoryId: categoryRecord?._id || null,
+          attributes: normalizedAttributes.values || {},
+          sizes: normalizedSizes,
+          colors: normalizedColors,
+          variants: nextVariants,
+          fit: normalizedFit,
+          sizeChart: normalizedSizeChart,
+          stock: nextStock,
+          searchTextNormalized: buildNormalizedProductSearchText({ ...searchSource, variants: nextVariants }),
+        },
+      }, { new: true, runValidators: true });
+    }
+    if (!saved) throw stockConflictError("STOCK_CONFLICT");
+    product = saved;
 
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
@@ -624,6 +674,12 @@ export const updateProduct = async (req, res) => {
     return res.json(product);
   } catch (error) {
     if (error.name === "CastError") return res.status(400).json({ message: "شناسه محصول معتبر نیست." });
+    if (error.code === "STOCK_BELOW_RESERVED") {
+      return res.status(409).json({ message: "موجودی جدید کمتر از تعداد رزرو یا فروخته‌شده است؛ صفحه را تازه‌سازی و دوباره تلاش کنید." });
+    }
+    if (error.code === "STOCK_CONFLICT") {
+      return res.status(409).json({ message: "موجودی هم‌زمان تغییر کرد؛ صفحه را تازه‌سازی و دوباره تلاش کنید." });
+    }
     console.error("Error updating product", error.message);
     return res.status(500).json({ message: "به‌روزرسانی محصول ناموفق بود." });
   }
@@ -668,12 +724,26 @@ export const updateProductStock = async (req, res) => {
   try {
     const beforeProduct = await Product.findById(req.params.id).select("name category stock").lean();
     if (!beforeProduct) return res.status(404).json({ message: "Product not found" });
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { $set: { stock } },
-      { new: true, runValidators: true }
-    ).select("_id stock");
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    // "Set stock to N" is applied as a delta from what the admin saw, so reservations made
+    // since then survive. expectedStock (optional) is the value shown in the admin's form.
+    const expected = req.body.expectedStock === undefined || req.body.expectedStock === null || req.body.expectedStock === ""
+      ? beforeProduct.stock : Number(req.body.expectedStock);
+    let product;
+    if (Number.isSafeInteger(expected) && Number.isSafeInteger(beforeProduct.stock)) {
+      const delta = stock - expected;
+      product = await Product.findOneAndUpdate(
+        { _id: req.params.id, stock: { $type: "number", $gte: Math.max(0, -delta) } },
+        { $inc: { stock: delta } },
+        { new: true, runValidators: true }
+      ).select("_id stock");
+    } else {
+      product = await Product.findOneAndUpdate(
+        { _id: req.params.id, stock: beforeProduct.stock ?? null },
+        { $set: { stock } },
+        { new: true, runValidators: true }
+      ).select("_id stock");
+    }
+    if (!product) return res.status(409).json({ message: "Stock changed concurrently or would drop below reserved units; reload and retry" });
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
       action: "product.stock_updated",
@@ -712,12 +782,22 @@ export const updateProductVariantStock = async (req, res) => {
     }).select("name category variants").lean();
     if (!beforeProduct) return res.status(404).json({ message: "Product variant not found" });
     const beforeVariant = (beforeProduct.variants || []).find((variant) => variant.size === size && variant.color === color);
-    const product = await Product.findOneAndUpdate(
-      { _id: req.params.id, variants: { $elemMatch: { size, color } } },
-      { $set: { "variants.$.stock": stock } },
-      { new: true, runValidators: true }
-    ).select("_id variants");
-    if (!product) return res.status(404).json({ message: "Product variant not found" });
+    // Delta from what the admin saw (optional expectedStock) so concurrent reservations survive.
+    const expected = req.body.expectedStock === undefined || req.body.expectedStock === null || req.body.expectedStock === ""
+      ? beforeVariant?.stock : Number(req.body.expectedStock);
+    const delta = Number.isSafeInteger(expected) ? stock - expected : null;
+    const product = delta === null
+      ? await Product.findOneAndUpdate(
+          { _id: req.params.id, variants: { $elemMatch: { size, color, stock: beforeVariant?.stock } } },
+          { $set: { "variants.$.stock": stock } },
+          { new: true, runValidators: true }
+        ).select("_id variants")
+      : await Product.findOneAndUpdate(
+          { _id: req.params.id, variants: { $elemMatch: { size, color, stock: { $gte: Math.max(0, -delta) } } } },
+          { $inc: { "variants.$.stock": delta } },
+          { new: true, runValidators: true }
+        ).select("_id variants");
+    if (!product) return res.status(409).json({ message: "Variant stock changed concurrently or would drop below reserved units; reload and retry" });
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
       action: "product.variant_stock_updated",
