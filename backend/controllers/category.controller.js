@@ -23,7 +23,7 @@ const sortCategories = (items) => items.sort((a, b) =>
 );
 
 const getVisibleCategories = async () => {
-  const all = await Category.find({}).sort({ sortOrder: 1, "name.fa": 1 }).lean();
+  const all = await Category.find({}).select("-__v").sort({ sortOrder: 1, "name.fa": 1 }).lean();
   const activeIds = new Set(all.filter((item) => item.isActive).map((item) => idString(item._id)));
   return sortCategories(all.filter((item) =>
     item.isActive && (item.ancestors || []).every((ancestor) => activeIds.has(idString(ancestor)))
@@ -31,7 +31,7 @@ const getVisibleCategories = async () => {
 };
 
 const getCategoryScope = async (slug) => {
-  const selected = await Category.findOne({ slug }).lean();
+  const selected = await Category.findOne({ slug }).select("-__v").lean();
   if (!selected) return null;
   const visible = await getVisibleCategories();
   const selectedId = idString(selected._id);

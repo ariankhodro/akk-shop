@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Campaign from "../models/campaign.model.js";
 import Product from "../models/product.model.js";
 import { recordAuditEvent } from "../lib/audit-log.js";
+import { isSafeInternalHref } from "../lib/internal-href.js";
 import { ImageUploadError, ImageStorageError, deleteManagedCloudinaryImage, resolveImageReference } from "../lib/image-upload.js";
 
 const persianSlugCharacters = {
@@ -30,6 +31,14 @@ const createCampaignSlug = (title, id) => {
   return (slugTitle || "campaign") + "-" + String(id);
 };
 
+// Accept 24-hex strings or ObjectId instances only (isValidObjectId also
+// accepts numbers and 12-character strings, which later fail as CastErrors).
+const objectIdText = (value) => {
+  if (typeof value === "string") return /^[a-f\d]{24}$/i.test(value) ? value.toLowerCase() : "";
+  if (value instanceof mongoose.Types.ObjectId) return value.toHexString();
+  return "";
+};
+
 const isValidCampaignInput = (body) => {
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const href = typeof body.href === "string" ? body.href.trim() : "";
@@ -38,8 +47,7 @@ const isValidCampaignInput = (body) => {
   return Boolean(
     title &&
     title.length <= 100 &&
-    href.startsWith("/") &&
-    !href.startsWith("//") &&
+    isSafeInternalHref(href) &&
     Number.isFinite(startsAt.getTime()) &&
     Number.isFinite(endsAt.getTime()) &&
     endsAt > startsAt &&
@@ -47,8 +55,8 @@ const isValidCampaignInput = (body) => {
     Number(body.sortOrder ?? 0) >= 0 &&
     Array.isArray(body.productIds ?? []) &&
     (body.productIds ?? []).length <= 48 &&
-    (body.productIds ?? []).every((id) => mongoose.isValidObjectId(id)) &&
-    new Set((body.productIds ?? []).map(String)).size === (body.productIds ?? []).length
+    (body.productIds ?? []).every((id) => objectIdText(id) !== "") &&
+    new Set((body.productIds ?? []).map(objectIdText)).size === (body.productIds ?? []).length
   );
 };
 
@@ -69,27 +77,60 @@ export const getActiveCampaigns = async (req, res) => {
   }
 };
 
+// SEC-10: GET /campaigns/:id used to increment `views` unconditionally, so
+// crawlers, link prefetchers and the SEO renderer inflated the counter. The
+// preferred path is the explicit POST /campaigns/:id/view beacon. Until the
+// storefront calls it, GET keeps counting (CAMPAIGN_VIEWS_ON_GET defaults to
+// on); set CAMPAIGN_VIEWS_ON_GET=false afterwards to make GET read-only.
+const viewsCountedOnGet = () => String(process.env.CAMPAIGN_VIEWS_ON_GET ?? "true").toLowerCase() !== "false";
+
+const isNonHumanFetch = (req) => {
+  const header = (name) => String(req.get?.(name) ?? req.headers?.[name.toLowerCase()] ?? "");
+  return req.method === "HEAD" ||
+    /prefetch|prerender/i.test(header("Sec-Purpose") + header("Purpose") + header("X-Moz")) ||
+    header("X-Skip-View-Count") === "1" ||
+    /bot|crawl|spider|slurp|preview|facebookexternalhit|node|undici|curl|wget/i.test(header("User-Agent"));
+};
+
+const activeCampaignFilter = (key) => {
+  const now = new Date();
+  const lookup = mongoose.isValidObjectId(key) ? { _id: key } : { slug: key };
+  return { ...lookup, isActive: true, startsAt: { $lte: now }, endsAt: { $gt: now } };
+};
+
 export const getCampaignById = async (req, res) => {
   const key = String(req.params.id || "").trim();
   if (!key || key.length > 140) return res.status(404).json({ message: "Campaign not found" });
-  const lookup = mongoose.isValidObjectId(key) ? { _id: key } : { slug: key };
   try {
-    const now = new Date();
-    const campaign = await Campaign.findOneAndUpdate({
-      ...lookup,
-      isActive: true,
-      startsAt: { $lte: now },
-      endsAt: { $gt: now },
-    }, { $inc: { views: 1 } }, { new: true }).select("slug title description image href startsAt endsAt productIds views clicks").populate({
+    const filter = activeCampaignFilter(key);
+    // Public projection: counters (`views`, `clicks`) stay server-side.
+    const projection = "slug title description image href startsAt endsAt productIds";
+    const populate = {
       path: "productIds",
       match: { isActive: { $ne: false } },
       select: "name description price image images category sizes colors variants fit stock isFeatured isActive createdAt",
-    }).lean();
+    };
+    const campaign = viewsCountedOnGet() && !isNonHumanFetch(req)
+      ? await Campaign.findOneAndUpdate(filter, { $inc: { views: 1 } }, { new: true }).select(projection).populate(populate).lean()
+      : await Campaign.findOne(filter).select(projection).populate(populate).lean();
     if (!campaign) return res.status(404).json({ message: "Campaign not found or no longer active" });
     return res.json({ campaign });
   } catch (error) {
     console.error("Error loading campaign detail", error.message);
     return res.status(500).json({ message: "Unable to load campaign" });
+  }
+};
+
+export const trackCampaignView = async (req, res) => {
+  const key = String(req.params.id || "").trim();
+  if (!key || key.length > 140) return res.status(404).json({ message: "Campaign not found" });
+  try {
+    const campaign = await Campaign.findOneAndUpdate(activeCampaignFilter(key), { $inc: { views: 1 } }, { new: false }).select("_id").lean();
+    if (!campaign) return res.status(404).json({ message: "Campaign not found or no longer active" });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Unable to record campaign view", error.message);
+    return res.status(500).json({ message: "Unable to record campaign view" });
   }
 };
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { isSafeInternalHref } from "../lib/internal-href.js";
 
 const campaignSchema = new mongoose.Schema(
   {
@@ -14,7 +15,7 @@ const campaignSchema = new mongoose.Schema(
       required: true,
       default: "/shop",
       validate: {
-        validator: (value) => typeof value === "string" && value.startsWith("/") && !value.startsWith("//"),
+        validator: isSafeInternalHref,
         message: "Campaign links must be relative storefront paths",
       },
     },

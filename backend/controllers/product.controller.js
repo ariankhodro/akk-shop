@@ -20,6 +20,38 @@ const productImageInputs = (images, image) => {
   if (images !== undefined && images !== null) return images; // rejected by the resolver
   return image ? [image] : [];
 };
+// SEC-13: deep offsets are expensive; public listings stop at this page.
+const MAX_PUBLIC_PAGE = 200;
+// SEC-10: never expose Mongo internals on public reads. Stock numbers stay
+// because the storefront cart/product UI relies on exact values (documented).
+const PUBLIC_PRODUCT_PROJECTION = "-__v";
+
+// SEC-16: free-form attributes (products without a category definition) are
+// stored as Mixed. Bound size, depth and key shape before storing them.
+const MAX_FREEFORM_ATTRIBUTES = 50;
+const sanitizeFreeformAttributes = (input) => {
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const entries = Object.entries(raw);
+  if (entries.length > MAX_FREEFORM_ATTRIBUTES) return { error: "تعداد ویژگی‌های محصول بیش از حد مجاز است." };
+  const values = {};
+  for (const [key, value] of entries) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(key)) return { error: "کلید ویژگی محصول معتبر نیست." };
+    if (typeof value === "string") {
+      if (value.length > 500) return { error: "مقدار ویژگی محصول بیش از حد طولانی است." };
+      values[key] = value;
+    } else if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
+      values[key] = value;
+    } else if (Array.isArray(value) && value.length <= 24 &&
+        value.every((entry) => typeof entry === "string" && entry.length <= 120)) {
+      values[key] = value;
+    } else if (value === null) {
+      continue;
+    } else {
+      return { error: "مقدار ویژگی محصول معتبر نیست." };
+    }
+  }
+  return { values };
+};
 const cleanupProductImages = async (urls, reason) => {
   for (const url of new Set(urls.filter(Boolean))) {
     try {
@@ -189,7 +221,7 @@ export const getAllProducts = async (req, res) => {
 
 export const getProductById = async (req, res) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isActive: { $ne: false } }).lean();
+    const product = await Product.findOne({ _id: req.params.id, isActive: { $ne: false } }).select(PUBLIC_PRODUCT_PROJECTION).lean();
     if (!product) return res.status(404).json({ message: "Product not found" });
     return res.json(product);
   } catch (error) {
@@ -204,7 +236,7 @@ export const getFeaturedProducts = async (_req, res) => {
   if (Array.isArray(cached)) return res.json(cached);
   try {
     const featuredProducts = await Product.find({ isFeatured: true, isActive: { $ne: false } })
-      .sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
+      .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
     await writeJsonCache("featured_products_v2", featuredProducts, 300);
     return res.json(featuredProducts);
   } catch (error) {
@@ -217,7 +249,7 @@ export const getNewestProducts = async (req, res) => {
   try {
     const limit = clampInteger(req.query.limit, 8, 1, 24);
     const products = await Product.find({ isActive: { $ne: false } })
-      .sort({ createdAt: -1, _id: -1 }).limit(limit).lean();
+      .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(limit).lean();
     return res.json({ products });
   } catch (error) {
     console.error("Error in getNewestProducts controller", error.message);
@@ -263,7 +295,7 @@ export const getSearchedProducts = async (req, res) => {
     const rawQuery = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 80) : "";
     const q = normalizePersianText(rawQuery).slice(0, 80);
     const category = typeof req.query.category === "string" ? req.query.category.trim().slice(0, 64) : "";
-    const page = clampInteger(req.query.page, 1, 1, 5000);
+    const page = clampInteger(req.query.page, 1, 1, MAX_PUBLIC_PAGE);
     const limit = clampInteger(req.query.limit, 24, 1, 48);
     const minPrice = req.query.minPrice === undefined || req.query.minPrice === "" ? null : Number(req.query.minPrice);
     const maxPrice = req.query.maxPrice === undefined || req.query.maxPrice === "" ? null : Number(req.query.maxPrice);
@@ -317,10 +349,13 @@ export const getSearchedProducts = async (req, res) => {
       priceDesc: { price: -1, _id: -1 },
       nameAsc: { name: 1, _id: 1 },
     };
-    const sort = sortMap[req.query.sort] || sortMap.newest;
+    // Own-property lookup: "__proto__", "constructor" etc. must not resolve.
+    const sort = typeof req.query.sort === "string" && Object.hasOwn(sortMap, req.query.sort)
+      ? sortMap[req.query.sort]
+      : sortMap.newest;
     const [total, products] = await Promise.all([
       Product.countDocuments(filter).maxTimeMS(1500),
-      Product.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
+      Product.find(filter).select(PUBLIC_PRODUCT_PROJECTION).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
     ]);
     return res.json({ products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
@@ -347,7 +382,7 @@ export const createProduct = async (req, res) => {
     const productCategory = categoryRecord ? categoryRecord.slug : (typeof category === "string" ? category.trim() : "");
     const normalizedAttributes = categoryRecord
       ? await validateProductAttributes(categoryRecord, attributes)
-      : { values: attributes && typeof attributes === "object" && !Array.isArray(attributes) ? attributes : {} };
+      : sanitizeFreeformAttributes(attributes);
     if (normalizedAttributes.error) return res.status(400).json({ message: normalizedAttributes.error });
     const numericPrice = price === "" || price === undefined || price === null ? Number.NaN : Number(price);
     const numericStock = stock === "" || stock === undefined || stock === null ? null : Number(stock);
@@ -515,7 +550,7 @@ export const updateProduct = async (req, res) => {
     const rawAttributes = body.attributes && typeof body.attributes === "object" && !Array.isArray(body.attributes) ? body.attributes : {};
     const normalizedAttributes = categoryRecord
       ? await validateProductAttributes(categoryRecord, rawAttributes)
-      : { values: rawAttributes };
+      : sanitizeFreeformAttributes(rawAttributes);
     if (normalizedAttributes.error) return res.status(400).json({ message: normalizedAttributes.error });
 
     const normalizedSizes = Array.isArray(body.sizes)
@@ -848,7 +883,12 @@ export const getProductsByCategory = async (req, res) => {
         ],
       });
     } else {
-      // Preserve access to legacy category slugs during and after migration.
+      // Preserve access to legacy category slugs during and after migration,
+      // but only for slugs that actually have catalogue products (SEC-8): an
+      // unknown slug is a cheap 404 and never reaches the facet aggregation
+      // or the Redis cache, so random slugs cannot create cache keys.
+      const legacyMatch = await Product.exists({ category: slug, isActive: { $ne: false } });
+      if (!legacyMatch) return res.status(404).json({ message: "دسته‌بندی پیدا نشد." });
       baseClauses.push({ category: slug });
     }
 
@@ -970,7 +1010,7 @@ export const getProductsByCategory = async (req, res) => {
     }
 
     const filter = { $and: clauses };
-    const page = clampInteger(req.query.page, 1, 1, 100000);
+    const page = clampInteger(req.query.page, 1, 1, MAX_PUBLIC_PAGE);
     const limit = clampInteger(req.query.limit, 24, 1, 60);
     const offset = (page - 1) * limit;
     const countOnly = ["1", "true"].includes(String(req.query.countOnly || "").toLowerCase());
@@ -1060,7 +1100,7 @@ export const getProductsByCategory = async (req, res) => {
     }
 
     const [products, total, priceStats] = await Promise.all([
-      Product.find(filter).sort(sort).skip(offset).limit(limit).maxTimeMS(1500).lean(),
+      Product.find(filter).select(PUBLIC_PRODUCT_PROJECTION).sort(sort).skip(offset).limit(limit).maxTimeMS(1500).lean(),
       Product.countDocuments(filter).maxTimeMS(1500),
       Product.aggregate([
         { $match: { $and: baseClauses } },
@@ -1117,7 +1157,7 @@ export const toggleFeaturedProduct = async (req, res) => {
 async function updateFeaturedProductsCache() {
   try {
     const products = await Product.find({ isFeatured: true, isActive: { $ne: false } })
-      .sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
+      .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
     await writeJsonCache("featured_products_v2", products, 300);
   } catch (error) {
     console.error("Unable to refresh featured-products cache", error.message);
@@ -1127,7 +1167,7 @@ async function updateFeaturedProductsCache() {
 
 export const getBestsellingProducts = async (req, res) => {
   const limit = clampInteger(req.query.limit, 8, 1, 24);
-  const cacheKey = `bestselling_products_v1:${limit}`;
+  const cacheKey = `bestselling_products_v2:${limit}`;
   const cached = await readJsonCache(cacheKey);
   if (Array.isArray(cached)) return res.json({ products: cached });
   try {
@@ -1150,12 +1190,9 @@ export const getBestsellingProducts = async (req, res) => {
       { $match: { "product.isActive": { $ne: false } } },
       { $sort: { soldQuantity: -1, orderCount: -1, _id: 1 } },
       { $limit: limit },
-      { $replaceRoot: { newRoot: {
-        $mergeObjects: [
-          "$product",
-          { soldQuantity: "$soldQuantity", orderCount: "$orderCount" },
-        ],
-      } } },
+      // SEC-10: sales volume is used for ranking only and must not be exposed.
+      { $replaceRoot: { newRoot: "$product" } },
+      { $project: { __v: 0, searchTextNormalized: 0 } },
     ]).option({ maxTimeMS: 2500 });
     await writeJsonCache(cacheKey, products, 60);
     return res.json({ products });
