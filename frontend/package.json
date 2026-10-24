@@ -8,7 +8,7 @@
 		"build": "npm test && vite build",
 		"lint": "eslint .",
 		"preview": "vite preview",
-		"test": "node --test tests/refresh-flow.test.js tests/user-error-message.test.js tests/seo-utils.test.js tests/seo-handlers.test.js tests/normalize-text.test.js"
+		"test": "node --test tests/refresh-flow.test.js tests/user-error-message.test.js tests/seo-utils.test.js tests/seo-handlers.test.js tests/normalize-text.test.js tests/persian-validity.test.js"
 	},
 	"dependencies": {
 		"react": "^18.3.1",
