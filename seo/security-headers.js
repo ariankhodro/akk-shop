@@ -9,8 +9,8 @@ export const CONTENT_SECURITY_POLICY = [
   // 'unsafe-inline': React inline style props and the inline style attributes
   // of the server-rendered SEO markup. Scripts stay strictly external, which
   // is what matters for XSS.
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: https://res.cloudinary.com https://trustseal.enamad.ir",
   "connect-src 'self'",
   "manifest-src 'self'",

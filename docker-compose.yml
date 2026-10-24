@@ -1,0 +1,167 @@
+# MIBA production stack.
+#   ./scripts/docker-gen-env.sh            # first run: creates .env with random secrets
+#   docker compose up -d --build           # app on http://127.0.0.1:5000
+#   docker compose --profile proxy up -d   # + Caddy with automatic HTTPS for $DOMAIN
+# See docs/operations/docker.md.
+name: miba
+
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      VITE_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+      VITE_STORE_SUPPORT_EMAIL: ${VITE_STORE_SUPPORT_EMAIL:-}
+      VITE_STORE_INSTAGRAM_URL: ${VITE_STORE_INSTAGRAM_URL:-}
+      VITE_STORE_TELEGRAM_URL: ${VITE_STORE_TELEGRAM_URL:-}
+      VITE_STORE_X_URL: ${VITE_STORE_X_URL:-}
+      VITE_ENAMAD_SEAL_IMAGE_URL: ${VITE_ENAMAD_SEAL_IMAGE_URL:-}
+      VITE_ENAMAD_SEAL_LINK_URL: ${VITE_ENAMAD_SEAL_LINK_URL:-}
+  image: ${APP_IMAGE:-miba-shop:latest}
+  env_file: .env
+  environment: &app-env
+    NODE_ENV: production
+    # Credentials come from .env; hosts are the compose service names.
+    MONGO_URI: mongodb://${MONGO_APP_USER:-miba_app}:${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}@mongo:27017/${MONGO_APP_DB:-miba}?replicaSet=rs0&authSource=${MONGO_APP_DB:-miba}
+    REDIS_URL: redis://default:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+    MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
+    UPLOADS_DIR: /app/data/uploads
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 20s
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging: &default-logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  mongo:
+    image: mongo:7.0
+    entrypoint: ["/bin/bash", "/opt/miba/entrypoint.sh"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/configdb/replica.key"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-miba_root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_APP_DB: ${MONGO_APP_DB:-miba}
+      MONGO_APP_USER: ${MONGO_APP_USER:-miba_app}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+      - ./docker/mongo/entrypoint.sh:/opt/miba/entrypoint.sh:ro
+      - ./docker/mongo/healthcheck.sh:/opt/miba/healthcheck.sh:ro
+      - ./docker/mongo/init-app-user.sh:/docker-entrypoint-initdb.d/10-init-app-user.sh:ro
+    healthcheck:
+      test: ["CMD", "bash", "/opt/miba/healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    networks: [backend]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  redis:
+    image: redis:7.2-alpine
+    # The password is passed through the environment so it never appears in `ps` output.
+    command: ["sh", "-c", "exec redis-server --appendonly yes --appendfsync everysec --requirepass \"$$REDIS_PASSWORD\" --maxmemory-policy noeviction"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks: [backend]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  app:
+    <<: *app-base
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-5000}:5000"
+    volumes:
+      - uploads:/app/data/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks: [backend, edge]
+
+  worker:
+    <<: *app-base
+    command: ["node", "scripts/reconcile-worker.mjs"]
+    environment:
+      <<: *app-env
+      RECONCILE_API_URL: http://app:5000
+    depends_on:
+      app:
+        condition: service_healthy
+    # The image HEALTHCHECK probes the HTTP API, which the worker does not serve.
+    healthcheck:
+      disable: true
+    networks: [backend]
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: [proxy]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+networks:
+  # No route to the outside world: databases are reachable only from the app.
+  backend:
+    internal: true
+  edge: {}
+
+volumes:
+  mongo-data:
+  mongo-config:
+  redis-data:
+  uploads:
+  caddy-data:
+  caddy-config:

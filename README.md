@@ -1,341 +1,152 @@
 <div align="center">
 
-# Tik Boutique
+<img src="frontend/public/miba-logo.svg" alt="MIBA" width="220" />
 
-**A Persian-first, right-to-left commerce platform built for Iranian shoppers.**
+# MIBA · میبا
 
-A production-focused MERN storefront with whole-Toman pricing, Zarinpal checkout, inventory safeguards, order tracking, and tools for customers and store administrators.
+**فروشگاه تخصصی قطعات یدکی خودروهای چینی — خرده‌فروشی و عمده‌فروشی**
 
-<p>
-  <a href="https://github.com/ItsWanheda/mern-ecommerce/actions/workflows/ci.yml"><img src="https://github.com/ItsWanheda/mern-ecommerce/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI status for master" /></a>
-  <a href="https://github.com/ItsWanheda/mern-ecommerce/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-68745f?style=flat-square" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/Currency-IRT%20%7C%20Toman-16803c?style=flat-square" alt="IRT Toman only" />
-  <img src="https://img.shields.io/badge/Payments-Zarinpal-4e7b59?style=flat-square" alt="Zarinpal only" />
-</p>
-<p>
-  <img src="https://img.shields.io/badge/React-Vite-646CFF?style=flat-square&logo=react&logoColor=white" alt="React and Vite" />
-  <img src="https://img.shields.io/badge/Node.js-Express-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js and Express" />
-  <img src="https://img.shields.io/badge/MongoDB-Mongoose-47A248?style=flat-square&logo=mongodb&logoColor=white" alt="MongoDB and Mongoose" />
-  <img src="https://img.shields.io/badge/Redis-ioredis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
-  <img src="https://img.shields.io/badge/Persian-fa--IR%20%7C%20RTL-68745f?style=flat-square" alt="Persian right-to-left interface" />
-</p>
-
-> **Licensing is unresolved** (LICENSE is GPL-2.0, the badge says MIT, `package.json` says ISC; image provenance unknown). See [docs/legal/licensing-status.md](docs/legal/licensing-status.md) before redistributing. Security status: [docs/security/remediation-report.md](docs/security/remediation-report.md).
-
-[Features](#-features) · [Architecture](#-architecture) · [Setup](#-getting-started) · [Environment](#-environment-variables) · [API](#-api-reference) · [Deployment](#-deployment) · [Testing](#-testing-and-migrations)
+A Persian-first, right-to-left e-commerce platform for Chinese automotive spare parts
+(Chery/MVM, JAC, Haval/Great Wall, Geely, BYD, Lifan, Brilliance, Dongfeng, …),
+with a public retail storefront and a private wholesale channel for pre-approved partners.
 
 </div>
 
-## ✨ Features
+> **Licensing:** `LICENSE` is GPL-2.0 while older metadata said MIT/ISC. Read
+> [docs/legal/licensing-status.md](docs/legal/licensing-status.md) before redistributing.
+> All images in `frontend/public/` are original SVGs created for MIBA.
 
-### 🛒 Persian storefront
-- Persian-first right-to-left (RTL) layout, navigation, product discovery, and category browsing.
-- Responsive home, shop, category, product-detail, cart, wishlist, account, and order-history experiences.
-- Customer profile editing and saved delivery-address management, including a direct **«پروفایل و نشانی‌ها»** link in the mobile hamburger menu.
-- Product variants, stock availability, recommendations, coupons, campaigns, and newsletter subscription management.
-- Toman-only price formatting with whole-Toman validation.
+## Features
 
-### 💳 Checkout and inventory
-- **Zarinpal is the only payment provider.**
-- **IRT (Toman) is the only storefront and order currency.**
-- Server-side price, coupon, shipping, and inventory checks before initiating checkout.
-- Inventory reservation, safe release, idempotent paid-order finalization, and scheduled recovery of uncertain payment results.
-- Checkout rejects unknown or missing stock quantities; null stock is not interpreted as unlimited inventory.
-- Payment status verification is performed server-side; the browser redirect alone is not treated as proof of payment.
+### Retail storefront (public)
+- Orange MIBA brand, fully Persian RTL, responsive, light and dark themes, self-hosted Vazirmatn font.
+- **Fitment finder**: pick make → model → year and see compatible parts.
+- Search by part name, **SKU or OEM part number** (with or without dashes or spaces), car make or model.
+- Filters for vehicle, part brand, quality (genuine, OEM, aftermarket, used), stock and price.
+- Product pages show the part number, OEM numbers, brand, quality, origin, warranty and a compatible-vehicles table.
+- Cart, Zarinpal checkout in whole Toman (IRT), order history and shipment tracking.
 
-### 🚚 Orders and fulfillment
-- Iranian delivery-address validation and an address snapshot stored with each new order.
-- Customer order history and shipment events.
-- Admin shipment queue with guarded status transitions and carrier/tracking-code requirements.
-- Product, category, campaign, coupon, customer, and fulfillment management, plus inventory alerts, service requests, analytics, and an administrative audit log.
-- An operational dashboard for payment, shipment, database, and Redis signals.
+### Wholesale (pre-created accounts only)
+- **There is no public wholesale signup.** Public signup always creates a retail account, and the server ignores `accountType`, `role` and `wholesaleProfile` in the request.
+- Staff with the `wholesale.manage` permission create partner accounts in the admin panel. Each account has a company profile, an optional personal discount (0–50%) and a temporary password that the partner must change at first login.
+- Signed-in partners see their own wholesale unit price on listings, product pages and the cart. A product's wholesale price applies from its minimum quantity; below that quantity the retail price applies.
+- Partners can order up to 1,000 units per line (retail: 100). A quick-order page accepts part numbers and quantities.
+- Every price is computed **on the server** (`backend/lib/pricing.js`). The raw catalogue wholesale price is never sent to any browser. Coupons do not stack on wholesale prices.
+- Changing a partner's tier, discount or active status revokes their sessions immediately.
 
-### 🔐 Security and reliability
-- HTTP-only authentication cookies and role-protected administrative routes.
-- Explicit security headers, exact-origin CORS allowlisting, origin/Fetch Metadata checks, and API rate limits.
-- Strong password creation and reset policy, including common-pattern rejection and bcrypt input-length protection.
-- Category and campaign Base64 uploads are validated and stored as HTTPS Cloudinary URLs.
-- Persian/Arabic character and digit normalization for product search.
-- Lazy-loaded frontend routes and admin sections to reduce initial JavaScript work.
+### Admin
+- Products: auto-part identity (SKU, OEM numbers, brand, quality, origin, warranty), vehicle fitments, retail and wholesale prices, minimum wholesale quantity, images and stock.
+- Categories, inventory alerts, orders and fulfilment (wholesale orders are tagged), coupons, campaigns, shipping, analytics, newsletter, service requests and an audit log.
+- Customers: retail and wholesale accounts, wholesale terms, temporary passwords, activation.
+- Access control is deny-by-default, with an owner tier and role presets (manager, catalogue editor, fulfilment, support, **sales**, marketing, analyst). See [docs/security/permission-matrix.md](docs/security/permission-matrix.md).
 
-## 🧭 Architecture
+### Security
+- HTTP-only, SameSite=Strict, Secure cookies; short-lived access tokens; rotating refresh tokens stored as digests in Redis; token-version revocation.
+- Strict input readers (no operator injection), password policy, rate limits that fail closed on authentication endpoints, and audited admin actions.
+- Server-side pricing, coupon and inventory checks inside a MongoDB transaction; idempotent Zarinpal verification and reconciliation.
+- Strict CSP (scripts and fonts only from `'self'`), CORS limited to exact origins, Fetch-Metadata and origin checks.
+- Images are validated by signature and dimensions, stored in Cloudinary or on a local volume (`MEDIA_STORAGE=local`), and served with `nosniff` and a sandboxed CSP.
 
-The frontend communicates with an Express API. MongoDB stores users, products, carts, orders, campaigns, shipping settings, and audit events. Redis supports sessions and distributed rate limiting; Cloudinary stores product imagery. Checkout and payment verification use Zarinpal.
+## Quick start with Docker (recommended)
 
-```mermaid
-flowchart TD
-    Customer[Customer / Admin] --> Web[React + Vite RTL storefront]
-    Web --> State[Zustand stores]
-    State --> Client[Axios API client]
-    Client --> API[Express API]
-    API --> Auth[JWT cookie authentication]
-    API --> DB[(MongoDB)]
-    API --> Redis[(Redis)]
-    API --> Media[Cloudinary]
-    API --> Checkout[Zarinpal checkout and verification]
-    Checkout --> Orders[IRT order records]
-    DB --> Orders
+```bash
+./scripts/docker-gen-env.sh http://localhost:5000   # writes .env with random secrets
+docker compose up -d --build                         # mongo (replica set + auth), redis, app, worker
+docker compose run --rm app node scripts/seed-miba.mjs --demo-products
 ```
 
-### Payment flow
+Open <http://localhost:5000>. To create the first owner, register through the storefront, then run:
 
-1. The authenticated customer submits cart contents and a validated delivery address.
-2. The backend reloads product prices, validates whole-Toman amounts, checks the coupon and shipping configuration, and reserves tracked inventory atomically.
-3. The backend creates a pending IRT order and requests checkout from Zarinpal.
-4. The callback is verified with the provider from the backend. Ambiguous provider/network results remain pending for reconciliation rather than releasing stock prematurely.
-5. Successful payment finalizes the order idempotently. The reconciliation job retries incomplete or uncertain states.
+```bash
+docker compose run --rm -e BACKUP_CONFIRMED=yes app node scripts/bootstrap-owner.mjs --email you@example.com --apply
+```
 
-## 🧰 Technology stack
+For production behind HTTPS with Caddy (automatic certificates):
 
-| Area | Technologies |
+```bash
+./scripts/docker-gen-env.sh https://miba.example.ir
+docker compose --profile proxy up -d --build
+```
+
+Full guide, including hardening, backups and upgrades: [docs/operations/docker.md](docs/operations/docker.md).
+
+| Service | Role |
 | --- | --- |
-| Frontend | React, Vite, Tailwind CSS |
-| Routing and state | React Router, Zustand |
-| Components and feedback | Lucide React, Framer Motion, React Hot Toast |
-| API | Node.js, Express |
-| Database | MongoDB, Mongoose |
-| Session and rate-limit support | Redis, ioredis |
-| Product imagery | Cloudinary |
-| Payment | Zarinpal |
-| Hosting options | Vercel or self-managed Node.js/static hosting |
+| `mongo` | MongoDB 7 single-node replica set (needed for transactions), keyFile + users, persistent volumes |
+| `redis` | Sessions, rate limits and locks; password-protected, AOF persistence |
+| `app` | API + built SPA, non-root, read-only root filesystem, health-checked |
+| `worker` | Payment reconciliation every 5 minutes |
+| `caddy` | Optional (`--profile proxy`): TLS termination and reverse proxy |
 
-## 🗂️ Project structure
+Databases are reachable only on an internal network and are never published on the host.
 
-```text
-mern-ecommerce/
-├── backend/
-│   ├── api/                 # Serverless API entry point
-│   ├── controllers/         # Auth, products, cart, checkout, orders, admin
-│   ├── lib/                 # Database, Redis, shipping, search, audit
-│   ├── middleware/          # Auth, rate limiting, security/CORS
-│   ├── models/              # User, product, order, campaign, audit, settings
-│   ├── routes/              # Express API route modules
-│   ├── tests/               # Currency, search, security, recovery tests
-│   ├── app.js
-│   └── package.json
-├── frontend/
-│   └── src/
-│       ├── components/
-│       ├── pages/
-│       ├── stores/
-│       └── lib/             # API and commerce helpers
-├── docs/
-│   ├── PERSIAN_COMMERCE_OVERVIEW.md
-│   ├── PERSIAN_COMMERCE_SETUP.md
-│   ├── admin-expansion-requirements.md
-│   ├── password-recovery.md
-│   └── seo-share-previews.md
-├── scripts/
-│   ├── audit-untracked-inventory.mjs
-│   ├── backfill-persian-search.mjs
-│   ├── migrate-categories.mjs
-│   ├── migrate-coupons.mjs
-│   ├── migrate-orders-to-zarinpal-only.mjs
-│   └── reconcile-pending-payments.mjs
-├── package.json
-└── package-lock.json
-```
+## Local development
 
-## 🚀 Getting started
-
-### Prerequisites
-
-- Node.js 20 or newer and npm.
-- MongoDB. Use a replica set or compatible managed deployment for production inventory transactions.
-- Redis for refresh-token storage and distributed rate limiting.
-- Cloudinary credentials for product image uploads.
-- A Zarinpal merchant configuration; keep sandbox mode enabled while validating checkout.
-
-### 1. Install dependencies
-
-Run from the repository root:
+Requires Node.js 20.19+ (22 recommended), a MongoDB **replica set** and Redis.
 
 ```bash
-npm ci
-npm ci --prefix frontend
+npm ci && npm ci --prefix frontend
+cp .env.example .env            # fill in the values; for local HTTP add ALLOW_INSECURE_COOKIES=true ALLOW_DEV_ORIGINS=true and NODE_ENV=development
+npm run seed -- --demo-products
+npm run dev:all                 # API on :5000 + Vite on :5173
 ```
 
-### 2. Configure environment variables
+## Environment
 
-Create a local environment file that is not committed to Git. Use the backend values below, then add `VITE_API_URL` to the frontend environment only when the API is not reachable through the same-origin `/api` path.
-
-```dotenv
-NODE_ENV=development
-PORT=5000
-MONGO_URI=mongodb://127.0.0.1:27017/mern-ecommerce
-REDIS_URL=redis://127.0.0.1:6379
-ACCESS_TOKEN_SECRET=replace_with_a_long_random_secret
-REFRESH_TOKEN_SECRET=replace_with_a_different_long_random_secret
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-ZARINPAL_MERCHANT_ID=your_merchant_id
-ZARINPAL_SANDBOX=true
-IRT_CATALOG_PRICES_CONFIRMED=false
-API_URL=http://localhost:5000
-CLIENT_URL=http://localhost:5173
-DEFAULT_SHIPPING_FEE=0
-FREE_SHIPPING_THRESHOLD=0
-CRON_SECRET=replace_with_a_long_random_secret
-```
-
-For a separate frontend/API deployment, set the frontend build variable:
-
-```dotenv
-VITE_API_URL=https://your-api.example/api
-```
-
-Never put backend credentials or payment secrets in a variable prefixed with `VITE_`.
-
-### 3. Verify the catalogue before checkout
-
-The backend intentionally rejects checkout until `IRT_CATALOG_PRICES_CONFIRMED=true`. First audit and update every sellable product price, shipping fee, and free-shipping threshold to approved whole-Toman values. Do not simply change currency labels or apply an assumed conversion rate to existing catalogue values.
-
-### 4. Start development servers
-
-Terminal 1 — API:
-
-```bash
-npm run dev
-```
-
-Terminal 2 — frontend:
-
-```bash
-npm run dev --prefix frontend
-```
-
-Open [http://localhost:5173](http://localhost:5173). The API health endpoint is [http://localhost:5000/api/health](http://localhost:5000/api/health); it confirms the application process responds, not that every dependency is healthy.
-
-## 🔑 Environment variables
+All backend variables are documented in [.env.example](.env.example) (bare metal) and
+[.env.docker.example](.env.docker.example) (Compose). Production refuses to start
+with missing or weak secrets (`backend/lib/config.js`). Important switches:
 
 | Variable | Purpose |
 | --- | --- |
-| `NODE_ENV` | Runtime environment; set to `production` on production deployments. |
-| `PORT` | Local/backend listener port. |
-| `MONGO_URI` | MongoDB connection string. |
-| `REDIS_URL` | Redis connection string. The older `UPSTASH_REDIS_URL` is accepted for compatibility. |
-| `ACCESS_TOKEN_SECRET` | Signing secret for short-lived access cookies. |
-| `REFRESH_TOKEN_SECRET` | Separate signing secret for refresh cookies. |
-| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Product media configuration. |
-| `ZARINPAL_MERCHANT_ID` | Merchant identifier configured by the payment provider. |
-| `ZARINPAL_SANDBOX` | Keep `true` during integration testing; disable only after live readiness checks. |
-| `IRT_CATALOG_PRICES_CONFIRMED` | Must remain `false` until catalog/shipping prices have been verified in Toman. |
-| `API_URL` | Public backend origin used to construct the payment callback. |
-| `CLIENT_URL` | Exact storefront origin used for redirects and origin allowlisting. |
-| `CORS_ALLOWED_ORIGINS` | Optional comma-separated list of additional exact frontend origins. |
-| `DEFAULT_SHIPPING_FEE`, `FREE_SHIPPING_THRESHOLD` | Whole-Toman shipping settings. |
-| `CRON_SECRET` | Long random secret authorizing payment reconciliation. |
-| `VITE_API_URL` | Optional public frontend build variable for a separately hosted API. Never use it for secrets. |
-| `VITE_STORE_INSTAGRAM_URL`, `VITE_STORE_TELEGRAM_URL`, `VITE_STORE_X_URL` | Optional public profile links shown as social icons in the footer. Use the store's real HTTPS profile URLs. |
-| `VITE_ENAMAD_SEAL_IMAGE_URL` | Public image/embed URL for the eNAMAD seal issued to this specific store. |
-| `VITE_ENAMAD_SEAL_LINK_URL` | Official eNAMAD verification link issued for this store. Do not substitute a generic eNAMAD homepage URL. |
+| `IRT_CATALOG_PRICES_CONFIRMED` | Checkout stays disabled until set to `true` after the catalogue prices have been verified in whole Toman. |
+| `ZARINPAL_MERCHANT_ID`, `ZARINPAL_SANDBOX` | Payment gateway settings. |
+| `MEDIA_STORAGE` | `local` (uploads volume) or `cloudinary`. |
+| `CLIENT_URL`, `API_URL`, `APP_URL`, `PUBLIC_SITE_URL` | Public origin(s); never derived from request headers. |
+| `TRUST_PROXY_HOPS` | Number of reverse proxies in front of the app. |
 
-The footer reads the public variables above at build time. The social icons remain inactive until real profile URLs are configured. Until the shop's own eNAMAD seal image and verification URL are configured, the footer labels the displayed generic mark as unverified; a generic logo is not evidence that this store has an active trust seal. Update the frontend environment and redeploy after changing these values.
+## API highlights
 
-## 🧱 Data and currency rules
-
-- New order records use `currency: "IRT"` and `paymentProvider: "zarinpal"`.
-- Product and shipping prices must be whole-Toman numeric values.
-- The gateway amount is supplied in Rial, so the backend converts the verified Toman amount to Rial at the payment boundary.
-- The frontend has no alternate currency selection or formatting path.
-- Records that do not contain explicit IRT/Zarinpal metadata are not included in the active order history. The migration preserves their order documents and amount fields; it does not attempt an unapproved currency conversion.
-
-Before deploying this version to an existing database, take a verified backup and run the one-time database migration described in [Persian commerce setup](docs/PERSIAN_COMMERCE_SETUP.md). The migration removes obsolete checkout-session indexes/metadata so they cannot interfere with new orders.
-
-## 🌐 API reference
-
-All routes are prefixed with `/api`.
+All routes are under `/api`. Personalised product responses are sent with `Cache-Control: private, no-store`.
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/health` | Public | Process health probe. |
-| `GET` | `/ready` | Public | Database readiness probe. |
-| `POST` | `/auth/signup` | Public | Create a customer account. |
-| `POST` | `/auth/login` | Public | Authenticate and set cookies. |
-| `POST` | `/auth/logout` | Session | Clear authentication cookies. |
-| `POST` | `/auth/refresh-token` | Session | Refresh the access session. |
-| `GET` | `/auth/profile` | Authenticated | Read the current user profile and saved addresses. |
-| `PATCH` | `/auth/profile` | Authenticated | Update profile information. |
-| `PATCH` | `/auth/profile/default-address` | Authenticated | Save/update the legacy default delivery address. |
-| `POST` | `/auth/profile/addresses` | Authenticated | Add a saved delivery address. |
-| `PATCH` | `/auth/profile/addresses/:addressId` | Authenticated | Edit a saved delivery address. |
-| `PATCH` | `/auth/profile/addresses/:addressId/default` | Authenticated | Make a saved address the default. |
-| `DELETE` | `/auth/profile/addresses/:addressId` | Authenticated | Delete a saved delivery address. |
-| `GET` | `/products` | Admin | List products for management. |
-| `GET` | `/products/featured` | Public | List featured products. |
-| `GET` | `/products/category/:category` | Public | Browse a product category. |
-| `POST` | `/cart` | Authenticated | Add a product/variant to the cart. |
-| `PUT` | `/cart/:id` | Authenticated | Update a cart line quantity. |
-| `DELETE` | `/cart` | Authenticated | Remove cart lines or empty the cart. |
-| `GET` | `/payments/provider` | Public | Read the active payment configuration. |
-| `POST` | `/payments/create-checkout` | Authenticated | Validate cart and start checkout. |
-| `GET` | `/payments/zarinpal/verify` | Provider callback | Verify payment result. |
-| `GET` | `/payments/zarinpal/order/:orderId` | Authenticated | Read owned order payment status. |
-| `GET` | `/payments/reconcile-pending` | Scheduler secret | Recover uncertain payment/order state. |
-| `GET` | `/orders/mine` | Authenticated | List active IRT orders and tracking. |
-| `GET` | `/orders/admin` | Admin | List paid orders for fulfillment. |
-| `PATCH` | `/orders/:id/shipment` | Admin | Update shipment state and tracking. |
-| `GET` | `/admin/audit-logs` | Admin | Review administrator actions. |
-| `GET` | `/admin/operations` | Admin | Read operational snapshot metrics. |
+| `GET` | `/products/search` | Public, viewer-priced | `q` (also part numbers), `category`, `make`, `model`, `year`, `partBrand`, `quality`, `inStock`, price range, sort |
+| `GET` | `/products/category/:slug` | Public, viewer-priced | Category listing with facets (makes, brands, qualities) |
+| `GET` | `/products/vehicles` | Public | Makes and models that have parts (fitment finder) |
+| `GET` | `/products/lookup?codes=` | Public, viewer-priced | Resolve SKU/OEM numbers (quick order) |
+| `GET` | `/products/:id` | Public, viewer-priced | Product details |
+| `POST` | `/auth/signup` | Public | Retail accounts only |
+| `POST` | `/auth/change-password` | Authenticated | Change the password; required after a temporary one |
+| `GET/POST/PUT/DELETE` | `/cart` | Authenticated | Cart with server-computed unit prices |
+| `POST` | `/payments/create-checkout` | Authenticated | Server-priced Zarinpal checkout |
+| `GET` | `/orders/mine` | Authenticated | Order history and shipment tracking |
+| `POST` | `/admin/customers` | `wholesale.manage` | Create a pre-approved (wholesale) customer account |
+| `PATCH` | `/admin/customers/:id/wholesale` | `wholesale.manage` | Edit wholesale terms or activation |
+| `POST` | `/admin/customers/:id/password` | `wholesale.manage` | Issue a temporary password |
 
-The complete route definitions and request validation are in `backend/routes/` and `backend/controllers/`.
+The full route list is in `backend/routes/`, and the admin permission table is in `backend/middleware/auth.middleware.js`.
 
-## 🚢 Deployment
-
-### Before production
-
-1. Back up the database and verify you can restore it.
-2. Update product prices, shipping settings, and thresholds to approved whole-Toman amounts.
-3. Run the order-metadata/index migration against the intended database after checking `MONGO_URI`.
-4. Configure production secrets in the host's secret manager; do not store secrets in Git.
-5. Set exact `CLIENT_URL` and `CORS_ALLOWED_ORIGINS` values. Avoid wildcard credentialed CORS.
-6. Use HTTPS and configure the trusted reverse proxy to forward the original scheme.
-7. Use a MongoDB replica set or transaction-capable managed deployment for atomic inventory recovery.
-8. Validate Zarinpal sandbox request, redirect, callback, failed request, timeout, duplicate callback, and reconciliation flows.
-9. Configure the reconciliation scheduler and alert on repeated failures.
-10. Enable `IRT_CATALOG_PRICES_CONFIRMED=true` only after catalogue verification.
-
-### Payment reconciliation
-
-The callback may be delayed or the provider/network response may be ambiguous. Production reconciliation must run about every five minutes using `GET /api/payments/reconcile-pending` with the `Authorization: Bearer <CRON_SECRET>` header. The repository includes `.github/workflows/reconcile-payments.yml`; configure the repository Actions secrets `PAYMENTS_API_URL` (public API origin without `/api`) and `CRON_SECRET` (same value as the backend secret). Vercel Cron is intentionally not configured in `backend/vercel.json` because Hobby plans do not support the required interval. Self-hosted deployments can use `scripts/reconcile-pending-payments.mjs` and the Linux cron example in [Persian commerce setup](docs/PERSIAN_COMMERCE_SETUP.md). Configure only one routine scheduler.
-
-## 🧪 Testing and migrations
-
-Build and test from the repository root:
+## Testing
 
 ```bash
-npm run build
-npm test
-npm test --prefix backend
+# Disposable MongoDB replica set + Redis (as in CI):
+docker run -d --name mongo-test -p 27017:27017 mongo:7.0 --replSet rs0 --bind_ip_all
+docker exec mongo-test mongosh --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+docker run -d --name redis-test -p 6379:6379 redis:7.2-alpine
+
+MONGO_TEST_URI='mongodb://127.0.0.1:27017/shop_test?replicaSet=rs0' REDIS_TEST_URL=redis://127.0.0.1:6379 npm test
+npm run lint --prefix frontend && npm test --prefix frontend && npm run build --prefix frontend
+MONGO_E2E_URI='mongodb://127.0.0.1:27017/shop_e2e_test?replicaSet=rs0' REDIS_E2E_URL=redis://127.0.0.1:6379/3 node e2e/run.mjs
 ```
 
-The backend suite covers IRT/Zarinpal policy, Persian search normalization, security headers/origin checks, and inventory reservation/recovery. Inventory integration tests need a dedicated disposable database configured through `MONGO_TEST_URI`; use a replica set for transaction-specific tests. Never point it to production or any database containing real orders.
+## Project layout
 
-To backfill normalized search text for existing products:
-
-```bash
-node scripts/backfill-persian-search.mjs
+```text
+backend/    Express API: controllers, models, lib (pricing, part fields, rbac, payments), middleware, tests
+frontend/   React + Vite + Tailwind storefront and admin panel (Zustand stores)
+api/, seo/  Server-rendered share previews, sitemap and robots (Vercel functions)
+docker/     Mongo entrypoint/healthcheck/user init, Caddyfile
+scripts/    Seed, owner bootstrap, migrations, reconciliation worker, backups
+docs/       Security, operations and audit documentation
 ```
-
-For existing order collections, take a verified backup and follow the guarded migration procedure in [Persian commerce setup](docs/PERSIAN_COMMERCE_SETUP.md).
-
-## 🔒 Security notes
-
-- Use unique, randomly generated authentication and scheduler secrets.
-- Keep MongoDB and Redis private and restrict network access.
-- Never expose Cloudinary/payment credentials through frontend build variables.
-- Run production behind HTTPS; configure the reverse proxy and cookie behavior deliberately.
-- Treat build/test results and live environment verification as separate release checks.
-
----
-
-<div align="center">
-
-**Made for a Persian-first shopping experience.**
-
-[Project](https://github.com/ItsWanheda/mern-ecommerce) · [Setup guide](docs/PERSIAN_COMMERCE_SETUP.md) · [License](LICENSE)
-
-<sub>Built with React, Node.js, Express, MongoDB, and Redis.</sub>
-
-</div>
