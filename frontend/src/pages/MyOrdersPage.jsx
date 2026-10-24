@@ -71,7 +71,7 @@ const MyOrdersPage = () => {
           <ClipboardList size={36} className="mx-auto text-[var(--ui-accent)]" aria-hidden="true" />
           <h2 className="mt-4 text-xl font-bold text-[var(--ui-text)]">هنوز سفارشی ثبت نشده است</h2>
           <p className="mt-2 text-sm text-[var(--ui-muted)]">بعد از ثبت سفارش، وضعیت پرداخت و اطلاعات رهگیری در همین صفحه نمایش داده می‌شود.</p>
-          <Link to="/shop" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--ui-text)] px-5 py-2 text-sm font-semibold text-white"><ArrowLeft size={16} aria-hidden="true" />مشاهده محصولات</Link>
+          <Link to="/shop" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--ui-accent)] px-5 py-2 text-sm font-semibold text-white"><ArrowLeft size={16} aria-hidden="true" />مشاهده قطعات</Link>
         </section>
       ) : (
         <div className="space-y-5">
@@ -99,17 +99,19 @@ const MyOrdersPage = () => {
                   <div className="flex flex-wrap gap-2">
                     <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${paymentStatusClass}`}>{paymentLabels[paymentStatus] || paymentStatus}</span>
                     <span className="rounded-full bg-[var(--ui-accent-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--ui-text-strong)]">{shipmentStatusLabel}</span>
+                    {order.pricingTier === "wholesale" && <span className="rounded-full bg-[var(--ui-accent)] px-3 py-1.5 text-xs font-bold text-white">خرید عمده</span>}
                   </div>
                 </div>
                 <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1.1fr_0.9fr]">
                   <section>
-                    <h2 className="mb-3 text-sm font-bold text-[var(--ui-text)]">محصولات سفارش</h2>
+                    <h2 className="mb-3 text-sm font-bold text-[var(--ui-text)]">قطعات سفارش</h2>
                     <div className="space-y-3">
                       {(order.products || []).map((item, index) => (
                         <div key={`${order._id}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--ui-canvas)] p-3">
                           <div className="min-w-0">
-                            <p className="break-words text-sm font-semibold text-[var(--ui-text)]">{item.productName || item.product?.name || "محصول"}</p>
-                            <p className="mt-1 text-xs text-[var(--ui-muted)]">تعداد: {new Intl.NumberFormat("fa-IR").format(item.quantity)}{item.size ? ` · سایز ${item.size}` : ""}{item.color ? ` · ${item.color}` : ""}</p>
+                            <p className="break-words text-sm font-semibold text-[var(--ui-text)]">{item.productName || item.product?.name || "قطعه"}</p>
+                            {item.sku && <p className="mt-1 text-xs text-[var(--ui-muted)]">کد کالا: <span dir="ltr" className="font-mono">{item.sku}</span></p>}
+                            <p className="mt-1 text-xs text-[var(--ui-muted)]">تعداد: {new Intl.NumberFormat("fa-IR").format(item.quantity)} · هر عدد {formatPrice(item.price)}{item.size ? ` · نوع ${item.size}` : ""}{item.color ? ` · ${item.color}` : ""}</p>
                           </div>
                           <p dir="ltr" className="shrink-0 text-sm font-semibold text-[var(--ui-accent)]">{formatPrice(Number(item.price) * Number(item.quantity))}</p>
                         </div>

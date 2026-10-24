@@ -7,6 +7,10 @@ import { clearSessionHint, hasSessionHint, setSessionHint } from "../lib/session
 const getErrorMessage = (error, fallback = "خطایی رخ داد") =>
 	error.response?.data?.message || error.message || fallback;
 
+// UI hint only: the server decides pricing from the account on every request.
+export const isWholesaleUser = (user) =>
+	Boolean(user) && user.accountType === "wholesale" && user.role !== "admin" && user.isActive !== false;
+
 export const useUserStore = create((set) => ({
 	user: null,
 	loading: false,
@@ -78,6 +82,13 @@ export const useUserStore = create((set) => ({
 			if (error?.response?.status === 401 || error?.response?.status === 403) clearSessionHint();
 			set({ checkingAuth: false, user: null });
 		}
+	},
+
+	// Signed-in password change. The server rotates the session cookies.
+	changePassword: async ({ currentPassword, newPassword }) => {
+		const response = await axios.post("/auth/change-password", { currentPassword, newPassword });
+		set((state) => ({ user: state.user ? { ...state.user, mustChangePassword: false } : state.user }));
+		return response.data;
 	},
 
 	updateProfile: async (name) => {

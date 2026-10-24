@@ -75,27 +75,6 @@ const collectionConfigs = {
     description: "مجموعه‌ای از قطعات منتخب میبا را بررسی کنید.",
     endpoint: "products/featured",
   },
-  "look-daily-style": {
-    routePath: "/looks/daily-style",
-    title: "کیت سرویس دوره‌ای",
-    description: "فیلترها و قطعات موتوری برای سرویس دوره‌ای خودروهای چینی.",
-    categories: ["filters", "engine", "cooling"],
-    image: "/categories/filters.svg",
-  },
-  "look-layers": {
-    routePath: "/looks/layers",
-    title: "ایمنی و ترمز",
-    description: "لنت، دیسک و قطعات جلوبندی برای ایمنی و سواری مطمئن.",
-    categories: ["brakes", "suspension"],
-    image: "/categories/brakes.svg",
-  },
-  "look-details": {
-    routePath: "/looks/details",
-    title: "برق و بدنه",
-    description: "قطعات برقی، چراغ و قطعات بدنه خودروهای چینی.",
-    categories: ["electrical", "body", "transmission"],
-    image: "/categories/electrical.svg",
-  },
 };
 
 const priceText = (value) => {

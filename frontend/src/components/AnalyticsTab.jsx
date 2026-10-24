@@ -48,7 +48,7 @@ const AnalyticsTab = () => {
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "tik-boutique-sales-" + days + "d.csv";
+      link.download = "miba-sales-" + days + "d.csv";
       document.body.appendChild(link);
       link.click();
       link.remove();

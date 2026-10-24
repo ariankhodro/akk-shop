@@ -121,7 +121,7 @@ const CouponManager = () => {
     }
   };
 
-  const fieldClass = "mt-1 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 py-2.5 text-sm text-[var(--ui-text)] outline-none transition focus:border-[#9aa58e] focus:ring-2 focus:ring-[#68745f]/30 disabled:opacity-50";
+  const fieldClass = "mt-1 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 py-2.5 text-sm text-[var(--ui-text)] outline-none transition focus:border-[#fb923c] focus:ring-2 focus:ring-[#ea580c]/30 disabled:opacity-50";
   const labelClass = "block text-sm leading-6 text-[var(--ui-muted)]";
   const canRename = !editingId || !coupons.find((coupon) => coupon._id === editingId && (coupon.usageCount > 0 || coupon.reservedCount > 0));
 
@@ -162,7 +162,7 @@ const CouponManager = () => {
             <input type="number" min="1" step="1" className={fieldClass} value={form.usageLimit} onChange={(event) => setForm({ ...form, usageLimit: event.target.value })} placeholder="نامحدود" />
           </label>
           <label className={labelClass + " flex items-center gap-3 rounded-xl border border-[var(--ui-border)] px-3 py-2.5"}>
-            <input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} className="h-4 w-4 accent-[#68745f]" />
+            <input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} className="h-4 w-4 accent-[#ea580c]" />
             <span>کد پس از ذخیره فعال باشد</span>
           </label>
         </div>

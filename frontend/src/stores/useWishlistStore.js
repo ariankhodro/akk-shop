@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
 
-const STORAGE_KEY = "tik-boutique-saved-products";
+const STORAGE_KEY = "miba-saved-products";
 
 const readSavedProducts = () => {
   if (typeof window === "undefined") return [];

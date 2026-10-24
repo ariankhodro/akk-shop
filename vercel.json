@@ -66,10 +66,6 @@
       "destination": "/api/share-preview?type=campaign&id=:campaignId"
     },
     {
-      "source": "/looks/:slug",
-      "destination": "/api/share-preview?type=collection&id=look-:slug"
-    },
-    {
       "source": "/new-arrivals",
       "destination": "/api/share-preview?type=collection&id=new-arrivals"
     },

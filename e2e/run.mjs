@@ -23,6 +23,7 @@ if (!existsSync(path.join(dist, "index.html"))) { console.error("Build the front
 
 const FRONT = 4173; const API = 5055; const ORIGIN = `http://127.0.0.1:${FRONT}`;
 const STRONG = "Zq!7vK-Lm2#Rt9xW";
+const STRONG2 = "Pv@4nR-Tc8!Lq3sY";
 const results = [];
 const step = async (name, fn) => {
   try { await fn(); results.push({ name, ok: true }); console.log("PASS", name); }
@@ -73,10 +74,18 @@ const { default: Order } = await import("../backend/models/order.model.js");
 const owner = await User.create({ name: "Store Owner", email: "owner@example.com", password: STRONG, role: "admin", isOwner: true, permissions: [] });
 await User.create({ name: "Analyst Person", email: "analyst@example.com", password: STRONG, role: "admin", permissions: ["reports.view"], adminRole: "analyst" });
 await User.create({ name: "Legacy Admin", email: "legacy@example.com", password: STRONG, role: "admin" });
-const category = await Category.create({ name: "پیراهن", slug: "shirts", description: "پیراهن‌های مردانه" }).catch(async () => Category.findOne({ slug: "shirts" }));
+const category = await Category.create({ name: { fa: "سیستم ترمز", en: "Brakes" }, slug: "brakes", description: { fa: "لنت و دیسک ترمز", en: "" } });
 const product = await Product.create({
-  name: "پیراهن آزمایشی", description: "پیراهن نخی برای آزمون سرتاسری", price: 450000, category: "shirts",
-  categoryId: category?._id || null, stock: 5, images: [], image: "", isActive: true, isFeatured: true,
+  name: "لنت ترمز جلو تیگو آزمایشی", description: "لنت ترمز جلو برای آزمون سرتاسری", price: 450000, category: "brakes",
+  categoryId: category._id, stock: 20, images: [], image: "", isActive: true, isFeatured: true,
+  sku: "T11-3501080", oemNumbers: ["T113501080BA"], brand: "Chery", quality: "genuine", countryOfOrigin: "چین", warrantyMonths: 6,
+  fitments: [{ make: "چری", model: "تیگو ۵", yearFrom: 2015, yearTo: 2022 }],
+  wholesalePrice: 300000, wholesaleMinQuantity: 3,
+});
+const otherProduct = await Product.create({
+  name: "فیلتر روغن جک آزمایشی", description: "فیلتر روغن برای آزمون فیلتر خودرو", price: 120000, category: "brakes",
+  categoryId: category._id, stock: 50, isActive: true, sku: "J5-1012010", brand: "JAC", quality: "oem",
+  fitments: [{ make: "جک", model: "J5" }],
 });
 
 const browser = await chromium.launch();
@@ -101,8 +110,26 @@ await step("browse: home renders RTL Persian storefront", async () => {
 
 await step("browse: product page shows product and price", async () => {
   await page.goto(`${ORIGIN}/product/${product._id}`, { waitUntil: "networkidle" });
-  expect((await page.textContent("body")).includes("پیراهن آزمایشی"), "product name missing");
+  const body = await page.textContent("body");
+  expect(body.includes("لنت ترمز جلو تیگو آزمایشی"), "product name missing");
+  expect(body.includes("T11-3501080") && body.includes("تیگو ۵"), "part number or fitment table missing");
+  expect(!body.includes("قیمت همکار") && !body.includes("300,000") && !body.includes("۳۰۰٬۰۰۰"), "wholesale price leaked to an anonymous visitor");
   await snap(page, "product");
+});
+
+await step("browse: fitment filter and part-number search narrow the catalogue", async () => {
+  await page.goto(`${ORIGIN}/shop?make=${encodeURIComponent("جک")}`, { waitUntil: "networkidle" });
+  let body = await page.textContent("body");
+  expect(body.includes("فیلتر روغن جک آزمایشی") && !body.includes("لنت ترمز جلو تیگو آزمایشی"), "vehicle filter did not narrow results");
+  await page.goto(`${ORIGIN}/shop`, { waitUntil: "networkidle" });
+  await page.fill("#shop-search", "t11 3501080ba");
+  await page.getByRole("button", { name: "جست‌وجو", exact: true }).click();
+  await page.waitForURL(/q=/);
+  await page.getByText("لنت ترمز جلو تیگو آزمایشی").first().waitFor({ timeout: 8000 });
+  await page.waitForLoadState("networkidle");
+  body = await page.textContent("main");
+  expect(body.includes("لنت ترمز جلو تیگو آزمایشی") && !body.includes("فیلتر روغن جک آزمایشی"), "OEM number search failed");
+  await snap(page, "shop-search");
 });
 
 await step("auth: signup rejects a weak password client-side/server-side and accepts a strong one", async () => {
@@ -132,25 +159,26 @@ await step("auth: session survives reload; cookies are HttpOnly", async () => {
 
 await step("cart: add product and see it in the cart", async () => {
   await page.goto(`${ORIGIN}/product/${product._id}`, { waitUntil: "networkidle" });
-  const add = page.getByRole("button", { name: /افزودن به سبد|اضافه به سبد/ }).first();
+  const add = page.getByRole("button", { name: /افزودن به سبد/ }).first();
   await add.click();
   await page.waitForTimeout(800);
   await page.goto(ORIGIN + "/cart", { waitUntil: "networkidle" });
-  expect((await page.textContent("body")).includes("پیراهن آزمایشی"), "cart does not contain the product");
+  expect((await page.textContent("body")).includes("لنت ترمز جلو تیگو آزمایشی"), "cart does not contain the product");
   await snap(page, "cart");
 });
 
-let orderId;
-await step("checkout: address -> gateway redirect -> verified callback -> success + stock decremented", async () => {
-  await page.route("**://sandbox.zarinpal.com/**", async (route) => {
+// Mocked gateway: StartPay immediately "returns" to the verify callback.
+const routeGateway = async (target, onOrder) => {
+  await target.route("**://sandbox.zarinpal.com/**", async (route) => {
     const authority = decodeURIComponent(new URL(route.request().url()).pathname.split("/").pop());
     const order = await Order.findOne({ zarinpalAuthority: authority }).lean();
-    orderId = String(order._id);
-    await route.fulfill({ status: 302, headers: { location: `${ORIGIN}/api/payments/zarinpal/verify?Authority=${authority}&Status=OK&order_id=${orderId}` } });
+    onOrder(String(order._id));
+    await route.fulfill({ status: 302, headers: { location: `${ORIGIN}/api/payments/zarinpal/verify?Authority=${authority}&Status=OK&order_id=${order._id}` } });
   });
+};
+const fillAddressAndPay = async (target) => {
   const fill = async (locator, value) => { await locator.first().fill(value); };
-  const form = page.locator("section[aria-labelledby='delivery-address-title']");
-  const inputs = form.locator("input");
+  const form = target.locator("section[aria-labelledby='delivery-address-title']");
   await fill(form.locator("input[autocomplete='name']"), "مشتری آزمایشی");
   await fill(form.locator("input[type='tel']"), "09123456789");
   const select = form.locator("select").first();
@@ -159,13 +187,18 @@ await step("checkout: address -> gateway redirect -> verified callback -> succes
   await fill(form.locator("input[autocomplete='address-level2']"), "تهران");
   await fill(form.locator("input[autocomplete='postal-code']"), "1234567890");
   await fill(form.locator("textarea[autocomplete='street-address']"), "خیابان آزمایش، پلاک ۱۰، واحد ۲");
-  void inputs;
-  await page.getByRole("button", { name: /پرداخت آنلاین/ }).click();
-  await page.waitForURL(/purchase-success/, { timeout: 15000 });
+  await target.getByRole("button", { name: /پرداخت آنلاین/ }).click();
+  await target.waitForURL(/purchase-success/, { timeout: 15000 });
+};
+
+let orderId;
+await step("checkout: address -> gateway redirect -> verified callback -> success + stock decremented", async () => {
+  await routeGateway(page, (id) => { orderId = id; });
+  await fillAddressAndPay(page);
   const order = await Order.findById(orderId).lean();
   expect(order.paymentStatus === "paid", "order not paid: " + order.paymentStatus);
   expect(order.finalizedAt, "order not finalized");
-  expect((await Product.findById(product._id).lean()).stock === 4, "stock not decremented to 4");
+  expect((await Product.findById(product._id).lean()).stock === 19, "stock not decremented to 19");
   await snap(page, "purchase-success");
 });
 
@@ -181,7 +214,8 @@ await step("payment: replayed callback is idempotent", async () => {
   expect(a.status === 302 && b.status === 302, "callback statuses " + a.status + "/" + b.status);
   const after = await Order.findById(orderId).lean();
   expect(after.shipmentEvents.length === order.shipmentEvents.length, "replay created another shipment event");
-  expect((await Product.findById(product._id).lean()).stock === 4, "replay changed stock");
+  expect((await Product.findById(product._id).lean()).stock === 19, "replay changed stock");
+  void otherProduct;
 });
 
 await step("security: operator-injection login payload is refused in a real browser session", async () => {
@@ -203,7 +237,7 @@ await step("admin: owner sees the full admin console and can change another admi
   const { ctx, p } = await adminLogin("owner@example.com");
   await p.goto(ORIGIN + "/secret-dashboard?tab=customers", { waitUntil: "networkidle" });
   const body = await p.textContent("body");
-  expect(body.includes("مدیریت مشتریان و دسترسی مدیران"), "customer management not shown to owner");
+  expect(body.includes("همکاران عمده و دسترسی مدیران"), "customer management not shown to owner");
   const tabs = await p.locator("[role=tab]").count();
   expect(tabs >= 14, "owner sees only " + tabs + " tabs");
   await snap(p, "admin-owner");
@@ -243,6 +277,67 @@ await step("admin: fulfilment role (promoted above) can ship the paid order; cus
   await ctx.close();
   const anon = await fetch(`http://127.0.0.1:${API}/api/orders/admin`);
   expect(anon.status === 401, "anonymous status " + anon.status);
+});
+
+let wholesaleOrderId;
+await step("wholesale: owner creates a pre-approved wholesale account (no public wholesale signup)", async () => {
+  const { ctx, p } = await adminLogin("owner@example.com");
+  const response = await p.evaluate(async (password) => {
+    const r = await fetch("/api/admin/customers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      name: "همکار آزمایشی", email: "partner@example.com", password, accountType: "wholesale",
+      wholesaleProfile: { companyName: "لوازم یدکی آزمایشی", city: "تهران", discountPercent: 10 },
+    }) });
+    return { status: r.status, body: await r.json() };
+  }, STRONG2);
+  expect(response.status === 201 && response.body.customer.mustChangePassword === true, "create status " + response.status);
+  await ctx.close();
+  const signup = await fetch(`${ORIGIN}/api/auth/signup`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN }, body: JSON.stringify({ name: "Self Wholesale", email: "self@example.com", password: STRONG, accountType: "wholesale" }) });
+  expect(signup.status === 201, "signup status " + signup.status);
+  expect((await User.findOne({ email: "self@example.com" }).lean()).accountType === "retail", "public signup produced a wholesale account");
+});
+
+await step("wholesale: first login forces a password change, then quick order shows wholesale prices", async () => {
+  const ctx = await browser.newContext({ locale: "fa-IR", viewport: { width: 1280, height: 900 } });
+  const p = await newPage(ctx);
+  await p.goto(ORIGIN + "/login?wholesale=1", { waitUntil: "networkidle" });
+  expect((await p.textContent("h1")).includes("ورود همکاران عمده"), "wholesale login heading missing");
+  await p.fill("#login-email", "partner@example.com"); await p.fill("#login-password", STRONG2);
+  await p.click('button[type="submit"]');
+  await p.waitForURL(/account\/change-password/, { timeout: 8000 }).catch(async (error) => {
+    await snap(p, "wholesale-login-failure");
+    throw new Error(error.message.split("\n")[0] + " at " + p.url() + " :: " + (await p.textContent("body")).slice(0, 300));
+  });
+  await p.goto(ORIGIN + "/shop", { waitUntil: "networkidle" });
+  expect(new URL(p.url()).pathname === "/account/change-password", "password change was not enforced");
+  await p.fill("#cp-currentPassword", STRONG2);
+  await p.fill("#cp-newPassword", STRONG);
+  await p.fill("#cp-confirmPassword", STRONG);
+  await p.getByRole("button", { name: "ذخیره رمز عبور جدید" }).click();
+  await p.waitForURL(/wholesale\/quick-order/, { timeout: 8000 }).catch(async (error) => {
+    await snap(p, "wholesale-change-password-failure");
+    throw new Error(error.message.split("\n")[0] + " at " + p.url() + " :: " + (await p.textContent("main")).slice(0, 400));
+  });
+  await p.fill("#quick-order-input", "t11 3501080  5\nNOPE-0000 2");
+  await p.getByRole("button", { name: /بررسی کدها/ }).click();
+  await p.getByText("قطعه‌ای با این کد پیدا نشد").waitFor({ timeout: 8000 });
+  const body = await p.textContent("body");
+  // 300,000 wholesale price minus the 10% account discount = 270,000 per unit.
+  expect(body.includes("۲۷۰٬۰۰۰"), "wholesale unit price not shown");
+  await snap(p, "wholesale-quick-order");
+  await p.getByRole("button", { name: /افزودن همه به سبد/ }).click();
+  await p.waitForTimeout(1000);
+  await p.goto(`${ORIGIN}/product/${product._id}`, { waitUntil: "networkidle" });
+  expect((await p.textContent("body")).includes("قیمت همکار"), "wholesale badge missing on product page");
+  await p.goto(ORIGIN + "/cart", { waitUntil: "networkidle" });
+  expect(await p.locator("text=کد تخفیف").count() === 0 || (await p.textContent("body")).includes("کد تخفیف روی قیمت عمده اعمال نمی‌شود"), "coupon UI shown to a wholesale buyer");
+  await routeGateway(p, (id) => { wholesaleOrderId = id; });
+  await fillAddressAndPay(p);
+  const order = await Order.findById(wholesaleOrderId).lean();
+  expect(order.paymentStatus === "paid" && order.pricingTier === "wholesale", "wholesale order " + order.paymentStatus + "/" + order.pricingTier);
+  expect(order.products[0].price === 270000 && order.products[0].quantity === 5 && order.subtotalAmount === 1350000, "charged " + JSON.stringify(order.products[0]) + " subtotal " + order.subtotalAmount);
+  await p.goto(ORIGIN + "/orders", { waitUntil: "networkidle" });
+  expect((await p.textContent("body")).includes("خرید عمده"), "wholesale tag missing on orders page");
+  await ctx.close();
 });
 
 await step("browser: no unexpected console errors during the journeys", async () => {

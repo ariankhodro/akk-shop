@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import axios from "../lib/axios";
 import { toast } from "react-hot-toast";
+import { lineTotal, maxLineQuantity } from "../lib/commerce";
 
-const GUEST_CART_KEY = "tik-boutique-guest-cart";
+const GUEST_CART_KEY = "miba-guest-cart";
 const getErrorMessage = (error, fallback = "خطایی رخ داد") =>
   error.response?.data?.message || error.message || fallback;
 
@@ -63,7 +64,7 @@ const mergeCartLines = (cart, incomingItem) => {
 
 const totalsFor = (cart, coupon) => {
   const subtotal = (Array.isArray(cart) ? cart : []).reduce(
-    (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0
+    (sum, item) => sum + lineTotal(item), 0
   );
   const meetsMinimum = coupon && subtotal >= Number(coupon.minOrderAmount || 0);
   const rawDiscount = meetsMinimum ? Math.round(subtotal * Number(coupon.discountPercentage || 0) / 100) : 0;
@@ -202,49 +203,59 @@ export const useCartStore = create((set, get) => ({
   addToCart: async (product, selection = {}) => {
     const size = selection.size || "";
     const color = selection.color || "";
+    const requested = selection.quantity === undefined ? 1 : Number(selection.quantity);
     const key = cartItemKey({ _id: product._id, selectedSize: size, selectedColor: color });
     const state = get();
     const existing = state.cart.find((item) => cartItemKey(item) === key);
-    const nextQuantity = Number(existing?.quantity || 0) + 1;
+    const limit = maxLineQuantity(existing || product);
+    if (!Number.isInteger(requested) || requested < 1 || requested > limit) {
+      if (!selection.silent) toast.error("تعداد باید بین ۱ تا " + limit.toLocaleString("fa-IR") + " باشد");
+      return false;
+    }
+    const nextQuantity = Number(existing?.quantity || 0) + requested;
+    if (nextQuantity > limit) {
+      if (!selection.silent) toast.error("حداکثر " + limit.toLocaleString("fa-IR") + " عدد از هر کالا در سبد مجاز است");
+      return false;
+    }
     const variant = findVariant(product, size, color);
     const trackedStock = variant ? variant.stock : product.stock;
     if (Array.isArray(product.variants) && product.variants.length && !variant) {
-      toast.error("لطفاً سایز و رنگ معتبر محصول را انتخاب کنید");
+      toast.error("لطفاً نوع و رنگ معتبر قطعه را انتخاب کنید");
       return false;
     }
     if (typeof trackedStock === "number" && nextQuantity > trackedStock) {
-      toast.error(trackedStock === 0 ? "این گزینه موجود نیست" : "تعداد درخواستی بیشتر از موجودی این گزینه است");
+      if (!selection.silent) toast.error(trackedStock === 0 ? "این گزینه موجود نیست" : "تعداد درخواستی بیشتر از موجودی این گزینه است");
       return false;
     }
 
     if (state.authenticated && !existing?.guestOnly) {
       try {
-        await axios.post("/cart", { productId: product._id, size, color });
+        await axios.post("/cart", { productId: product._id, size, color, quantity: requested });
         const item = {
           ...product, selectedSize: size, selectedColor: color,
-          cartItemId: key, quantity: 1,
+          cartItemId: key, quantity: requested,
         };
         const cart = mergeCartLines(get().cart.filter((line) => !line.guestOnly), item);
         const guestOnly = get().cart.filter((line) => line.guestOnly);
         const nextCart = [...cart, ...guestOnly];
         set({ cart: nextCart, ...totalsFor(nextCart, get().coupon) });
-        toast.success("محصول به سبد خرید اضافه شد");
+        if (!selection.silent) toast.success("قطعه به سبد خرید اضافه شد");
         return true;
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        if (!selection.silent) toast.error(getErrorMessage(error));
         return false;
       }
     }
 
     const item = {
       ...product, selectedSize: size, selectedColor: color,
-      cartItemId: key, quantity: 1, ...(state.authenticated ? { guestOnly: true } : {}),
+      cartItemId: key, quantity: requested, ...(state.authenticated ? { guestOnly: true } : {}),
     };
     const cart = mergeCartLines(state.cart, item);
     if (!state.authenticated) writeGuestCart(cart);
     else writeGuestCart(cart.filter((line) => line.guestOnly));
     set({ cart, ...totalsFor(cart, get().coupon) });
-    toast.success("محصول به سبد خرید اضافه شد");
+    if (!selection.silent) toast.success("قطعه به سبد خرید اضافه شد");
     return true;
   },
 
@@ -283,8 +294,9 @@ export const useCartStore = create((set, get) => ({
       await get().removeFromCart(existingItem);
       return;
     }
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
-      toast.error("تعداد باید بین ۱ تا ۱۰۰ باشد");
+    const limit = maxLineQuantity(existingItem);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > limit) {
+      toast.error("تعداد باید بین ۱ تا " + limit.toLocaleString("fa-IR") + " باشد");
       return;
     }
     const trackedStock = stockFor(existingItem);
