@@ -52,6 +52,7 @@ export const getOperationsDashboard = async (_req, res) => {
       shippedWithoutTracking,
       failedPayments24h,
       auditEvents24h,
+      manualReviewOrders,
     ] = await Promise.all([
       Order.countDocuments({ paymentStatus: "pending", paymentProvider: "zarinpal", currency: "IRT" }).maxTimeMS(1500),
       Order.countDocuments({ paymentStatus: "paid", finalizedAt: null, paymentProvider: "zarinpal", currency: "IRT" }).maxTimeMS(1500),
@@ -59,6 +60,8 @@ export const getOperationsDashboard = async (_req, res) => {
       Order.countDocuments({ paymentStatus: "paid", shipmentStatus: { $in: ["shipped", "delivered"] }, trackingCode: { $in: ["", null] }, paymentProvider: "zarinpal", currency: "IRT" }).maxTimeMS(1500),
       Order.countDocuments({ paymentStatus: "failed", updatedAt: { $gte: dayAgo }, paymentProvider: "zarinpal", currency: "IRT" }).maxTimeMS(1500),
       AuditLog.countDocuments({ createdAt: { $gte: dayAgo } }).maxTimeMS(1500),
+      // Paid-after-expiry and held-for-review payments need a person: money may be captured without a fulfilled order.
+      Order.countDocuments({ needsManualReview: true, paymentProvider: "zarinpal" }).maxTimeMS(1500),
     ]);
 
     const readyState = mongoose.connection.readyState;
@@ -77,7 +80,7 @@ export const getOperationsDashboard = async (_req, res) => {
     return res.json({
       generatedAt: now,
       health: { status: databaseState === "connected" && redisState === "connected" ? "healthy" : "degraded", database: databaseState, redis: redisState },
-      payments: { pending: pendingPayments, paidAwaitingFinalization: unfinalizedPaidOrders, failedLast24Hours: failedPayments24h },
+      payments: { pending: pendingPayments, paidAwaitingFinalization: unfinalizedPaidOrders, failedLast24Hours: failedPayments24h, needingManualReview: manualReviewOrders },
       fulfillment: { paidAwaitingShipment: waitingToShip, shippedWithoutTracking: shippedWithoutTracking },
       audit: { eventsLast24Hours: auditEvents24h },
     });
@@ -361,6 +364,9 @@ export const updateAdminServiceCase = async (req, res) => {
     return res.json({ serviceCase: updated });
   } catch (error) {
     if (error instanceof AccessChangeError) return res.status(error.status).json({ message: error.message });
+    if (error?.code === "REFUND_EXCEEDS_ORDER_TOTAL" || error?.message === "REFUND_EXCEEDS_ORDER_TOTAL") {
+      return res.status(409).json({ message: "Total approved refunds for this order would exceed the amount paid" });
+    }
     console.error("Unable to update service case", { name: error?.name, message: error?.message });
     return res.status(500).json({ message: "Unable to update service case" });
   } finally {

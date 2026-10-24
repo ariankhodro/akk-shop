@@ -48,6 +48,12 @@ export const validateEnvironment = (env = process.env) => {
     (production ? errors : warnings).push("RATE_LIMIT_KEY_SALT should be set to at least 16 random characters.");
   }
 
+  if (!isSet(env.NEWSLETTER_TOKEN_SECRET) || env.NEWSLETTER_TOKEN_SECRET.length < MIN_SECRET_LENGTH) {
+    warnings.push("NEWSLETTER_TOKEN_SECRET (32+ characters) is not set: newsletter confirmation/unsubscribe links cannot be issued.");
+  }
+  if (!isSet(env.READINESS_TOKEN)) warnings.push("READINESS_TOKEN is not set: /api/ready reports only a bare status to anonymous callers.");
+  if (!isSet(env.PUBLIC_SITE_URL) && !isSet(env.VERCEL_URL)) warnings.push("PUBLIC_SITE_URL is not set: SEO pages cannot determine the storefront origin.");
+
   if (production) {
     if (env.ALLOW_INSECURE_COOKIES === "true") errors.push("ALLOW_INSECURE_COOKIES must not be enabled in production.");
     if (env.ALLOW_DEV_ORIGINS === "true") errors.push("ALLOW_DEV_ORIGINS must not be enabled in production.");

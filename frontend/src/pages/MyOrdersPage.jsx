@@ -19,6 +19,7 @@ const paymentLabels = {
   paid: "پرداخت تأیید شد",
   failed: "پرداخت ناموفق",
   expired: "منقضی شد",
+  paid_after_expiry: "پرداخت دریافت شد؛ در حال بررسی توسط پشتیبانی",
   unknown: "وضعیت پرداخت ثبت نشده",
 };
 

@@ -207,6 +207,9 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
         description: form.description.trim(),
         price: Number(form.price),
         stock: combinations.length ? null : (form.stock === "" ? null : Number(form.stock)),
+        // The stock the admin was looking at: the server applies the change as a delta
+        // against it so reservations made meanwhile are never overwritten.
+        stockBaseline: product.stock ?? null,
         category: selectedCategory?.slug || form.category.trim(),
         categoryId: selectedCategory?.isLegacyFallback
           ? (!adminCategories.length && form.categoryId && !String(form.categoryId).startsWith("legacy:") ? form.categoryId : "")
@@ -218,6 +221,7 @@ const ProductEditForm = ({ product, onClose, onSaved }) => {
         colors,
         variants: combinations.map((variant) => ({
           size: variant.size, color: variant.color, stock: Number(variantStocks[variant.key] ?? 0),
+          stockBaseline: (product.variants || []).find((stored) => (stored.size || "") === (variant.size || "") && (stored.color || "") === (variant.color || ""))?.stock ?? null,
         })),
         fit: { type: form.fitType, description: form.fitDescription, modelHeight: form.modelHeight, modelSize: form.modelSize },
         sizeChart,
