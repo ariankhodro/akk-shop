@@ -1,5 +1,10 @@
 import { redis } from "../lib/redis.js";
-import cloudinary from "../lib/cloudinary.js";
+import {
+  ImageStorageError,
+  ImageUploadError,
+  deleteManagedCloudinaryImage,
+  resolveManagedImageList,
+} from "../lib/image-upload.js";
 import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
 import Order from "../models/order.model.js";
@@ -7,6 +12,23 @@ import { normalizePersianText, escapeSearchRegex } from "../lib/persian-search.j
 import { recordAuditEvent } from "../lib/audit-log.js";
 
 const idOf = (value) => value == null ? "" : String(value);
+const PRODUCT_IMAGE_FOLDER = "products";
+const MAX_PRODUCT_IMAGES = 8;
+const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+const productImageInputs = (images, image) => {
+  if (Array.isArray(images)) return images;
+  if (images !== undefined && images !== null) return images; // rejected by the resolver
+  return image ? [image] : [];
+};
+const cleanupProductImages = async (urls, reason) => {
+  for (const url of new Set(urls.filter(Boolean))) {
+    try {
+      await deleteManagedCloudinaryImage(url, { folder: PRODUCT_IMAGE_FOLDER });
+    } catch (error) {
+      console.error("Product image cleanup failed (" + reason + ")", { name: error?.name || "Error" });
+    }
+  }
+};
 const getCategoryProductScope = async (slug) => {
   const selected = await Category.findOne({ slug }).lean();
   if (!selected) return null;
@@ -308,6 +330,7 @@ export const getSearchedProducts = async (req, res) => {
 };
 
 export const createProduct = async (req, res) => {
+  let pendingUploadedImages = [];
   try {
     const {
       name, description, price, image, images, category, categoryId, attributes, stock,
@@ -402,18 +425,13 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Size measurements must be non-negative numbers" });
     }
 
-    const imageInputs = (Array.isArray(images) ? images : image ? [image] : [])
-      .filter((value) => typeof value === "string" && value.trim())
-      .slice(0, 8);
-    const uploadedImages = [];
-    for (const imageInput of imageInputs) {
-      if (/^https:\/\//i.test(imageInput)) {
-        uploadedImages.push(imageInput);
-      } else {
-        const response = await cloudinary.uploader.upload(imageInput, { folder: "products" });
-        if (response.secure_url) uploadedImages.push(response.secure_url);
-      }
-    }
+    const resolvedImages = await resolveManagedImageList(productImageInputs(images, image), {
+      folder: PRODUCT_IMAGE_FOLDER,
+      maxBytes: MAX_PRODUCT_IMAGE_BYTES,
+      maxCount: MAX_PRODUCT_IMAGES,
+    });
+    pendingUploadedImages = resolvedImages.uploaded;
+    const uploadedImages = resolvedImages.urls;
 
     const product = await Product.create({
       name: name.trim(),
@@ -431,6 +449,7 @@ export const createProduct = async (req, res) => {
       sizeChart: normalizedSizeChart,
       stock: normalizedVariants.length ? null : numericStock,
     });
+    pendingUploadedImages = [];
     await recordAuditEvent(req, {
       action: "product.created",
       targetType: "product",
@@ -460,12 +479,20 @@ export const createProduct = async (req, res) => {
     });
     return res.status(201).json(product);
   } catch (error) {
+    // Assets uploaded for a product that was never persisted must not leak.
+    if (pendingUploadedImages.length) await cleanupProductImages(pendingUploadedImages, "unpersisted create");
+    if (error instanceof ImageUploadError) return res.status(400).json({ message: error.message });
+    if (error instanceof ImageStorageError) return res.status(502).json({ message: error.message });
+    if (error?.name === "ValidationError" || error?.name === "CastError") {
+      return res.status(400).json({ message: "اطلاعات محصول معتبر نیست." });
+    }
     console.error("Error in createProduct controller", error.message);
     return res.status(500).json({ message: "Unable to create product" });
   }
 };
 
 export const updateProduct = async (req, res) => {
+  let pendingUploadedImages = [];
   try {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
@@ -562,20 +589,19 @@ export const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "اندازه‌های جدول سایز باید عددی نامنفی باشند." });
     }
 
-    const imageInputs = (Array.isArray(body.images) ? body.images : (body.image ? [body.image] : []))
-      .filter((value) => typeof value === "string" && value.trim()).slice(0, 8);
-    if ((Array.isArray(body.images) && body.images.length > 8) ||
-        imageInputs.some((value) => !/^https:\/\//i.test(value) && !/^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(value))) {
-      return res.status(400).json({ message: "فرمت تصاویر محصول معتبر نیست." });
-    }
-    const uploadedImages = [];
-    for (const imageInput of imageInputs) {
-      if (/^https:\/\//i.test(imageInput)) {
-        uploadedImages.push(imageInput);
-      } else {
-        const response = await cloudinary.uploader.upload(imageInput, { folder: "products" });
-        if (response.secure_url) uploadedImages.push(response.secure_url);
-      }
+    const previousImages = [product.image, ...(product.images || [])].filter(Boolean);
+    // Omitting both fields keeps the current gallery instead of wiping it.
+    const imagesProvided = body.images !== undefined || body.image !== undefined;
+    let uploadedImages = [...new Set(previousImages)];
+    if (imagesProvided) {
+      const resolvedImages = await resolveManagedImageList(productImageInputs(body.images, body.image), {
+        folder: PRODUCT_IMAGE_FOLDER,
+        maxBytes: MAX_PRODUCT_IMAGE_BYTES,
+        maxCount: MAX_PRODUCT_IMAGES,
+        existing: previousImages,
+      });
+      pendingUploadedImages = resolvedImages.uploaded;
+      uploadedImages = resolvedImages.urls;
     }
 
     const snapshot = (item) => ({
@@ -612,6 +638,9 @@ export const updateProduct = async (req, res) => {
     product.sizeChart = normalizedSizeChart;
     product.stock = normalizedVariants.length ? null : numericStock;
     await product.save();
+    pendingUploadedImages = [];
+    // Images dropped from the gallery are removed from media storage.
+    await cleanupProductImages(previousImages.filter((url) => !uploadedImages.includes(url)), "replaced image");
 
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
@@ -623,6 +652,9 @@ export const updateProduct = async (req, res) => {
     });
     return res.json(product);
   } catch (error) {
+    if (pendingUploadedImages.length) await cleanupProductImages(pendingUploadedImages, "unpersisted update");
+    if (error instanceof ImageUploadError) return res.status(400).json({ message: error.message });
+    if (error instanceof ImageStorageError) return res.status(502).json({ message: error.message });
     if (error.name === "CastError") return res.status(400).json({ message: "شناسه محصول معتبر نیست." });
     console.error("Error updating product", error.message);
     return res.status(500).json({ message: "به‌روزرسانی محصول ناموفق بود." });
@@ -747,15 +779,8 @@ export const deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
     if (product.isActive !== false) return res.status(409).json({ message: "ابتدا محصول را بایگانی کنید و سپس حذف دائمی را انجام دهید." });
-    if (product.image) {
-      try {
-        const publicId = product.image.split("/").pop().split(".")[0];
-        await cloudinary.uploader.destroy(`products/${publicId}`);
-      } catch (error) {
-        console.error("Error deleting product image", error.message);
-      }
-    }
     await Product.findByIdAndDelete(req.params.id);
+    await cleanupProductImages([product.image, ...(product.images || [])], "deleted product");
     await updateFeaturedProductsCache();
     await recordAuditEvent(req, {
       action: "product.deleted",
