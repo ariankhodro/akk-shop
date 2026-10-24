@@ -17,7 +17,9 @@
    `node scripts/migrate-admin-permissions.mjs [--assign staff@example.com=fulfillment ...]`
    `BACKUP_CONFIRMED=yes node scripts/migrate-admin-permissions.mjs --apply --assign ...`
    Legacy administrators without explicit permissions **lose all access** until the owner assigns a role; `*` holders become `manager` (everything except access management). The script is idempotent.
-5. Run the payment and inventory migrations listed in the remediation report, then `scripts/reconcile-pending-payments.mjs`.
+5. Payment/coupon integrity migration: `node scripts/migrate-payment-integrity.mjs` (dry run) then `--apply`. It sets `perUserLimit = 1` on existing coupons, rebuilds usage counters from orders, and **reports without editing** duplicate `zarinpalRefId` values and duplicate active refund/return cases. Those duplicates make the new unique indexes fail to build, so resolve them first. The ServiceCase partial index needs MongoDB 6.0+. New collections: `couponuserusages`, `couponredemptions`, `checkoutguards`, `reconciliation_leases`.
+   Also set `NEWSLETTER_TOKEN_SECRET`, `READINESS_TOKEN` (and update uptime monitors to send it), `PUBLIC_SITE_URL`. Legacy product images not hosted on Cloudinary will stop rendering under the new `img-src`; re-upload them. Campaign links with invalid hrefs must be corrected on next edit.
+   Then run `scripts/reconcile-pending-payments.mjs` once.
 6. Smoke test: login, add to cart, sandbox checkout (`ZARINPAL_SANDBOX=true` in a staging environment), admin tabs per role.
 
 Rollback: redeploy the previous build. The migrations are additive (new fields), but previous code treats administrators with explicit `permissions` correctly and has no knowledge of `isOwner`; do not roll back after relying on the owner tier without restoring the pre-migration backup.
