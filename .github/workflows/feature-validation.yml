@@ -1,0 +1,71 @@
+name: Feature branch validation
+
+on:
+  push:
+    branches:
+      - feat/persian-commerce-expansion
+      - main
+      - master
+      - feat/admin-ux-404-analytics
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Start disposable MongoDB replica set
+        run: |
+          docker run --detach --name mongo-test --publish 27017:27017 mongo:7.0 --replSet rs0 --bind_ip_all
+          for attempt in $(seq 1 60); do
+            if docker exec mongo-test mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' 2>/dev/null | grep -q '^1$'; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec mongo-test mongosh --quiet --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
+          for attempt in $(seq 1 60); do
+            if docker exec mongo-test mongosh --quiet --eval 'db.hello().isWritablePrimary' 2>/dev/null | grep -q '^true$'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs mongo-test
+          echo "MongoDB replica set did not become primary."
+          exit 1
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
+
+      - name: Check backend source and tests
+        run: npm run build --prefix backend
+
+      - name: Run security and inventory recovery tests
+        env:
+          MONGO_TEST_URI: mongodb://127.0.0.1:27017/mern_ecommerce_test?replicaSet=rs0
+        run: npm test --prefix backend
+
+      - name: Stop test database
+        if: always()
+        run: docker rm -f mongo-test || true

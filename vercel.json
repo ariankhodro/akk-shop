@@ -1,0 +1,142 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://mern-ecommerce-api-tau.vercel.app/api/:path*"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/robots"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/sitemap-static.xml",
+      "destination": "/api/sitemap-static"
+    },
+    {
+      "source": "/sitemap-products.xml",
+      "destination": "/api/sitemap-products"
+    },
+    {
+      "source": "/product/:productId",
+      "destination": "/api/share-preview?type=product&id=:productId"
+    },
+    {
+      "source": "/category/:slug",
+      "destination": "/api/share-preview?type=category&id=:slug"
+    },
+    {
+      "source": "/campaign/:campaignId",
+      "destination": "/api/share-preview?type=campaign&id=:campaignId"
+    },
+    {
+      "source": "/looks/:slug",
+      "destination": "/api/share-preview?type=collection&id=look-:slug"
+    },
+    {
+      "source": "/new-arrivals",
+      "destination": "/api/share-preview?type=collection&id=new-arrivals"
+    },
+    {
+      "source": "/bestsellers",
+      "destination": "/api/share-preview?type=collection&id=bestsellers"
+    },
+    {
+      "source": "/featured-products",
+      "destination": "/api/share-preview?type=collection&id=featured-products"
+    },
+    {
+      "source": "/",
+      "destination": "/api/page-shell?path=/"
+    },
+    {
+      "source": "/shop",
+      "destination": "/api/share-preview?type=collection&id=shop"
+    },
+    {
+      "source": "/campaigns",
+      "destination": "/api/share-preview?type=collection&id=campaigns"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/page-shell?path=/login"
+    },
+    {
+      "source": "/signup",
+      "destination": "/api/page-shell?path=/signup"
+    },
+    {
+      "source": "/forgot-password",
+      "destination": "/api/page-shell?path=/forgot-password"
+    },
+    {
+      "source": "/reset-password",
+      "destination": "/api/page-shell?path=/reset-password"
+    },
+    {
+      "source": "/secret-dashboard",
+      "destination": "/api/page-shell?path=/secret-dashboard"
+    },
+    {
+      "source": "/cart",
+      "destination": "/api/page-shell?path=/cart"
+    },
+    {
+      "source": "/profile",
+      "destination": "/api/page-shell?path=/profile"
+    },
+    {
+      "source": "/orders",
+      "destination": "/api/page-shell?path=/orders"
+    },
+    {
+      "source": "/wishlist",
+      "destination": "/api/page-shell?path=/wishlist"
+    },
+    {
+      "source": "/shipping-policy",
+      "destination": "/api/page-shell?path=/shipping-policy"
+    },
+    {
+      "source": "/returns-policy",
+      "destination": "/api/page-shell?path=/returns-policy"
+    },
+    {
+      "source": "/support",
+      "destination": "/api/page-shell?path=/support"
+    },
+    {
+      "source": "/faq",
+      "destination": "/api/page-shell?path=/faq"
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/api/page-shell?path=/privacy-policy"
+    },
+    {
+      "source": "/terms-of-use",
+      "destination": "/api/page-shell?path=/terms-of-use"
+    },
+    {
+      "source": "/newsletter-unsubscribe",
+      "destination": "/api/page-shell?path=/newsletter-unsubscribe"
+    },
+    {
+      "source": "/purchase-success",
+      "destination": "/api/page-shell?path=/purchase-success"
+    },
+    {
+      "source": "/purchase-cancel",
+      "destination": "/api/page-shell?path=/purchase-cancel"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/page-shell?path=/$1"
+    }
+  ]
+}

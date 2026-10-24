@@ -1,0 +1,361 @@
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
+
+:root {
+  color-scheme: light;
+  --ui-canvas: #f7f5f0; --ui-surface: #fffefa; --ui-surface-raised: #f2f0e9; --ui-input-bg: #fffefa;
+  --ui-text: #252722; --ui-text-strong: #41443b; --ui-muted: #62645c; --ui-border: #e4e0d8; --ui-border-strong: #c7c3b9;
+  --ui-hover: #e9ede4; --ui-accent: #68745f; --ui-accent-hover: #41443b; --ui-accent-soft: rgba(104,116,95,.12); --ui-focus: #68745f;
+  --ui-chart-grid: #dedbd2; --ui-chart-axis: #62645c; --ui-chart-secondary: #536b9c; --ui-overlay: rgba(37,39,34,.58); --ui-shadow-color: rgba(37,39,34,.22);
+  --ui-strong-surface: #252722; --ui-strong-hover: #41443b; --ui-inverse-text: #fffefa; --ui-button-text: #fffefa;
+  --ui-disabled-bg: #f2f0e9; --ui-disabled-text: #a0a195;
+  --ui-success: #356b4a; --ui-success-bg: #edf5ee; --ui-success-border: #b9d5bf;
+  --ui-danger: #8b3d34; --ui-danger-bg: #f8eeeb; --ui-danger-border: #e2b9b4;
+  --ui-warning: #805b17; --ui-warning-bg: #fbf4e5; --ui-warning-border: #e6d2a4;
+  --store-canvas: var(--ui-canvas); --store-surface: var(--ui-surface); --store-ink: var(--ui-text); --store-muted: var(--ui-muted);
+  --brand-primary: var(--ui-accent); --brand-hover: var(--ui-accent-hover); --brand-muted: var(--ui-accent); --brand-soft: var(--ui-hover);
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Backwards-compatible aliases: existing components can share the theme tokens without
+   requiring every legacy class to be rewritten in one release. */
+[class~="bg-[#68745f]"] { background-color: var(--brand-primary) !important; }
+[class~="hover:bg-[#68745f]"]:hover,
+[class~="hover:bg-[#41443b]"]:hover { background-color: var(--brand-hover) !important; }
+[class~="text-[#68745f]"] { color: var(--brand-primary) !important; }
+[class~="border-[#68745f]"] { border-color: var(--brand-primary) !important; }
+
+@layer base {
+  html {
+    min-height: 100%;
+    direction: rtl;
+    background-color: var(--store-canvas);
+    color: var(--store-ink);
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    direction: rtl;
+    background-color: var(--store-canvas);
+    color: var(--store-ink);
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+  }
+
+  #root {
+    min-height: 100vh;
+    background-color: var(--store-canvas);
+    color: var(--store-ink);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  /* RTL-aware alignment, spacing, and form controls. */
+  [dir="ltr"],
+  input[type="email"],
+  input[type="url"],
+  input[type="password"] {
+    unicode-bidi: plaintext;
+  }
+  /* Override physical Tailwind utilities where RTL should mirror the layout. */
+  .text-left { text-align: right !important; }
+  .text-right { text-align: left !important; }
+  .ml-1 { margin-left: 0 !important; margin-right: 0.25rem !important; }
+  .ml-2 { margin-left: 0 !important; margin-right: 0.5rem !important; }
+  .ml-3 { margin-left: 0 !important; margin-right: 0.75rem !important; }
+  .ml-4 { margin-left: 0 !important; margin-right: 1rem !important; }
+  .mr-1 { margin-right: 0 !important; margin-left: 0.25rem !important; }
+  .mr-2 { margin-right: 0 !important; margin-left: 0.5rem !important; }
+  .mr-3 { margin-right: 0 !important; margin-left: 0.75rem !important; }
+  .mr-4 { margin-right: 0 !important; margin-left: 1rem !important; }
+  input[type="email"], input[type="url"], input[type="password"] { direction: ltr; text-align: left; }
+  .pl-11.pr-4 { padding-left: 1rem !important; padding-right: 2.75rem !important; }
+  .pl-11.pr-12 { padding-left: 1rem !important; padding-right: 3rem !important; }
+  .absolute.left-3 { left: auto !important; right: 0.75rem !important; }
+  .absolute.left-4 { left: auto !important; right: 1rem !important; }
+  .absolute.left-8 { left: auto !important; right: 2rem !important; }
+  .absolute.right-3 { right: auto !important; left: 0.75rem !important; }
+  .absolute.right-5 { right: auto !important; left: 1.25rem !important; }
+  .md\\:right-0 { right: auto !important; left: 0 !important; }
+  input[type="email"], input[type="url"], input[type="password"] { direction: ltr; text-align: left; }
+  /* Keep the custom Lucide visibility toggle as the only password-eye control.
+     Edge adds its own native reveal button to password inputs otherwise. */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
+}
+
+
+/* Accessible, overlapping dual-thumb price range controls. */
+.price-range-slider {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.price-range-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.price-range-slider::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+
+.price-range-slider::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 3px solid var(--ui-surface);
+  border-radius: 9999px;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 1px var(--ui-accent), 0 2px 6px var(--ui-shadow-color);
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.price-range-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--ui-surface);
+  border-radius: 9999px;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 1px var(--ui-accent), 0 2px 6px var(--ui-shadow-color);
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.price-range-slider:active::-webkit-slider-thumb,
+.price-range-slider:active::-moz-range-thumb {
+  cursor: grabbing;
+}
+
+.price-range-slider:focus-visible {
+  outline: none;
+}
+
+.price-range-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--ui-accent-soft), 0 0 0 1px var(--ui-accent);
+}
+
+.price-range-slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--ui-accent-soft), 0 0 0 1px var(--ui-accent);
+}
+
+.price-range-slider:disabled {
+  cursor: not-allowed;
+}
+
+@keyframes searchPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[searchPanelIn_180ms_ease-out\] {
+    animation: none;
+  }
+}
+
+
+/* Dark theme: ink-black surfaces, crisp whites, graphite borders and champagne-gold accents.
+   Every override is scoped to data-theme="dark"; the light palette above remains unchanged. */
+html[data-theme="dark"] {
+  color-scheme: dark; background: #090a0c; color: #f5f6f8;
+  --ui-canvas: #090a0c; --ui-surface: #111318; --ui-surface-raised: #171a20; --ui-input-bg: #111318;
+  --ui-text: #f5f6f8; --ui-text-strong: #e1e4e9; --ui-muted: #a4aab5; --ui-border: #2b303a; --ui-border-strong: #4a515e;
+  --ui-hover: #292e37; --ui-accent: #d6b779; --ui-accent-hover: #e4c989; --ui-accent-soft: rgba(214,183,121,.12); --ui-focus: #e4c989;
+  --ui-chart-grid: #3a3f49; --ui-chart-axis: #a4aab5; --ui-chart-secondary: #8aa1d5; --ui-overlay: rgba(0,0,0,.68); --ui-shadow-color: rgba(0,0,0,.55);
+  --ui-strong-surface: #1d2128; --ui-strong-hover: #292e37; --ui-inverse-text: #f5f6f8; --ui-button-text: #090a0c;
+  --ui-disabled-bg: #22262e; --ui-disabled-text: #717987;
+  --ui-success: #8ec8a0; --ui-success-bg: #10251a; --ui-success-border: #2a5c3c;
+  --ui-danger: #f19a91; --ui-danger-bg: #2a1415; --ui-danger-border: #663234;
+  --ui-warning: #f4d28e; --ui-warning-bg: #2a2112; --ui-warning-border: #664b20;
+  --dark-canvas: var(--ui-canvas); --dark-surface: var(--ui-surface); --dark-raised: var(--ui-surface-raised);
+  --dark-elevated: var(--ui-strong-surface); --dark-border: var(--ui-border); --dark-text: var(--ui-text); --dark-muted: var(--ui-muted);
+  --dark-accent: var(--ui-accent); --dark-accent-hover: var(--ui-accent-hover);
+  --brand-primary: var(--ui-accent); --brand-hover: var(--ui-accent-hover); --brand-muted: var(--ui-accent); --brand-soft: var(--ui-hover);
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] #root {
+  background-color: var(--dark-canvas) !important;
+  color: var(--dark-text);
+}
+
+html[data-theme="dark"] header,
+html[data-theme="dark"] footer,
+html[data-theme="dark"] [class~="bg-[#f7f5f0]"],
+html[data-theme="dark"] [class~="bg-[#f7f5f0]/95"] {
+  background-color: var(--dark-canvas) !important;
+}
+
+html[data-theme="dark"] [class~="bg-[#fffefa]"],
+html[data-theme="dark"] [class~="bg-[#fffefa]/95"],
+html[data-theme="dark"] [class~="bg-[#fffefa]/70"],
+html[data-theme="dark"] [class~="bg-white"],
+html[data-theme="dark"] [class~="bg-white/70"],
+html[data-theme="dark"] [class~="bg-white/60"] {
+  background-color: var(--dark-surface) !important;
+}
+
+html[data-theme="dark"] [class~="bg-[#f2f0e9]"],
+html[data-theme="dark"] [class~="bg-[#e9ede4]"],
+html[data-theme="dark"] [class~="bg-[#e9e5dc]"],
+html[data-theme="dark"] [class~="bg-[#dce2d4]"],
+html[data-theme="dark"] [class~="bg-[#dfe5d6]"],
+html[data-theme="dark"] [class~="bg-[#ebe8df]"] {
+  background-color: var(--dark-raised) !important;
+}
+
+html[data-theme="dark"] [class~="bg-[#252722]"],
+html[data-theme="dark"] [class~="bg-[#41443b]"] {
+  background-color: var(--dark-elevated) !important;
+}
+
+html[data-theme="dark"] [class~="bg-[#68745f]"] {
+  background-color: var(--dark-accent) !important;
+}
+
+html[data-theme="dark"] [class~="hover:bg-[#41443b]"]:hover,
+html[data-theme="dark"] [class~="hover:bg-[#68745f]"]:hover {
+  background-color: var(--dark-accent-hover) !important;
+}
+
+html[data-theme="dark"] [class~="bg-gray-900"],
+html[data-theme="dark"] [class~="bg-gray-900/70"],
+html[data-theme="dark"] [class~="bg-gray-900/60"],
+html[data-theme="dark"] [class~="bg-gray-900/50"],
+html[data-theme="dark"] [class~="bg-gray-900/40"] {
+  background-color: #08090c !important;
+}
+
+html[data-theme="dark"] [class~="bg-gray-800"],
+html[data-theme="dark"] [class~="bg-gray-800/60"] {
+  background-color: #111318 !important;
+}
+
+html[data-theme="dark"] [class~="bg-gray-700"],
+html[data-theme="dark"] [class~="bg-gray-700/60"],
+html[data-theme="dark"] [class~="bg-gray-700/40"] {
+  background-color: #1d2128 !important;
+}
+
+html[data-theme="dark"] [class~="border-[#e4e0d8]"],
+html[data-theme="dark"] [class~="border-[#eeeae2]"],
+html[data-theme="dark"] [class~="border-[#eeeae1]"],
+html[data-theme="dark"] [class~="border-[#dedbd2]"],
+html[data-theme="dark"] [class~="border-[#d5d0c5]"],
+html[data-theme="dark"] [class~="border-[#e0dcd2]"],
+html[data-theme="dark"] [class~="border-[#dce2d4]"],
+html[data-theme="dark"] [class~="border-white/70"],
+html[data-theme="dark"] [class~="border-gray-700"],
+html[data-theme="dark"] [class~="border-gray-600"] {
+  border-color: var(--dark-border) !important;
+}
+
+html[data-theme="dark"] [class~="text-[#252722]"] {
+  color: var(--dark-text) !important;
+}
+
+html[data-theme="dark"] [class~="text-[#41443b]"],
+html[data-theme="dark"] [class~="text-[#55574f]"],
+html[data-theme="dark"] [class~="text-[#62645c]"] {
+  color: #e1e4e9 !important;
+}
+
+html[data-theme="dark"] [class~="text-[#77786f]"],
+html[data-theme="dark"] [class~="text-[#85867d]"],
+html[data-theme="dark"] [class~="text-[#9a9a90]"],
+html[data-theme="dark"] [class~="text-[#a0a195]"] {
+  color: var(--dark-muted) !important;
+}
+
+html[data-theme="dark"] [class~="text-[#68745f]"],
+html[data-theme="dark"] [class~="text-[#526149]"],
+html[data-theme="dark"] [class~="text-[#9aa58e]"] {
+  color: var(--dark-accent) !important;
+}
+
+html[data-theme="dark"] [class~="text-gray-100"],
+html[data-theme="dark"] [class~="text-gray-200"] {
+  color: #e8eaf0 !important;
+}
+
+html[data-theme="dark"] [class~="text-gray-300"] {
+  color: #c8cdd6 !important;
+}
+
+html[data-theme="dark"] [class~="text-gray-400"],
+html[data-theme="dark"] [class~="text-gray-500"] {
+  color: #a4aab5 !important;
+}
+
+html[data-theme="dark"] [class~="text-white"] {
+  color: #f5f6f8;
+}
+
+html[data-theme="dark"] [class~="bg-[#68745f]"][class~="text-white"],
+html[data-theme="dark"] [class~="bg-[#68745f]"] [class~="text-white"] {
+  color: #090a0c !important;
+}
+
+html[data-theme="dark"] [class~="hover:bg-[#f2f0e9]"]:hover,
+html[data-theme="dark"] [class~="hover:bg-[#e9ede4]"]:hover,
+html[data-theme="dark"] [class~="hover:bg-[#e9e5dc]"]:hover,
+html[data-theme="dark"] [class~="hover:bg-gray-700"]:hover,
+html[data-theme="dark"] [class~="hover:bg-gray-700/40"]:hover {
+  background-color: #292e37 !important;
+}
+
+html[data-theme="dark"] [class~="hover:text-[#252722]"]:hover {
+  color: var(--dark-accent-hover) !important;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  color-scheme: dark;
+  border-color: var(--dark-border);
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #9097a4;
+  opacity: 1;
+}
+
+html[data-theme="dark"] a,
+html[data-theme="dark"] button {
+  -webkit-tap-highlight-color: rgba(214, 183, 121, 0.12);
+}
+
+html[data-theme="dark"] ::selection {
+  color: #090a0c;
+  background: var(--dark-accent);
+}

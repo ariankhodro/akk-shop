@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="تیک بوتیک؛ خرید آنلاین پوشاک و اکسسوری با قیمت شفاف، انتخاب آسان و تجربه خرید امن." />
+    <meta name="theme-color" content="#f7f5f0" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="application-name" content="تیک بوتیک" />
+    <meta property="og:locale" content="fa_IR" />
+    <meta property="og:site_name" content="تیک بوتیک" />
+    <meta property="og:title" content="تیک بوتیک | فروشگاه آنلاین پوشاک و اکسسوری" />
+    <meta property="og:description" content="خرید آنلاین پوشاک و اکسسوری با انتخاب آسان و تجربه خرید امن." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script>
+      try {
+        const savedTheme = localStorage.getItem("tik-boutique-theme");
+        if (savedTheme === "dark") {
+          document.documentElement.dataset.theme = "dark";
+          document.documentElement.style.colorScheme = "dark";
+          document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#090a0c");
+        }
+      } catch {
+        // Fall back to the light theme when storage is unavailable.
+      }
+    </script>
+    <title>تیک بوتیک | فروشگاه آنلاین پوشاک و اکسسوری</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

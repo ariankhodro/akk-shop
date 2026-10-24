@@ -1,0 +1,25 @@
+{
+	"name": "e-commerce-store-backend",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"main": "server.js",
+	"scripts": {
+		"dev": "node server.js",
+		"build": "node --check api/index.js && node --check app.js && node --check lib/db.js && node --check lib/redis.js && node --check lib/readiness.js && node --check lib/refresh-token.js && node --check lib/admin-permissions.js && node --check lib/inventory-stock.js && node --check lib/persian-search.js && node --check lib/audit-log.js && node --check lib/coupons.js && node --check lib/payment-reconciliation.js && node --check lib/image-upload.js && node --check lib/password-policy.js && node --check middleware/rate-limit.middleware.js && node --check controllers/product.controller.js && node --check controllers/category.controller.js && node --check controllers/zarinpal.controller.js && node --check controllers/auth.controller.js && node --check controllers/order.controller.js && node --check controllers/analytics.controller.js && node --check controllers/admin.controller.js && node --check controllers/service-case.controller.js && node --check controllers/shipping.controller.js && node --check controllers/campaign.controller.js && node --check controllers/coupon.controller.js && node --check models/user.model.js && node --check models/service-case.model.js && node --check models/order.model.js && node --check models/product.model.js && node --check models/category.model.js && node --check models/coupon.model.js && node --check models/audit-log.model.js && node --check routes/category.route.js && node --check routes/coupon.route.js && node --check routes/auth.route.js && node --check routes/payment.route.js && node --check routes/order.route.js && node --check routes/analytics.route.js && node --check routes/admin.route.js && node --check routes/service-case.route.js && node --check routes/newsletter.route.js && node --check ../scripts/migrate-categories.mjs && node --check ../scripts/migrate-coupons.mjs && node --check ../scripts/backfill-persian-search.mjs && node --check ../scripts/reconcile-pending-payments.mjs && node --check ../scripts/migrate-orders-to-zarinpal-only.mjs && node --check ../scripts/audit-untracked-inventory.mjs && node --check middleware/security.middleware.js && node --check tests/security.middleware.test.js && node --check tests/readiness.test.js && node --check tests/refresh-token.test.js && node --check tests/admin-permissions.test.js && node --check tests/inventory-stock.test.js && node --check tests/inventory-recovery.integration.test.js && node --check tests/commerce-currency.test.js && node --check tests/coupons.test.js && node --check tests/image-upload.test.js && node --check tests/password-policy.test.js && node --check tests/payment-reconciliation.test.js && node --check tests/coupon-reservation.integration.test.js && node --test tests/persian-search.test.js tests/coupons.test.js tests/readiness.test.js tests/refresh-token.test.js tests/admin-permissions.test.js tests/inventory-stock.test.js tests/image-upload.test.js tests/password-policy.test.js tests/payment-reconciliation.test.js",
+		"start": "node server.js",
+		"migrate:categories": "node ../scripts/migrate-categories.mjs",
+		"migrate:coupons": "node ../scripts/migrate-coupons.mjs",
+		"test": "node --test tests/*.test.js"
+	},
+	"dependencies": {
+		"bcryptjs": "^2.4.3",
+		"cloudinary": "^2.4.0",
+		"cookie-parser": "^1.4.6",
+		"dotenv": "^16.4.5",
+		"express": "^4.19.2",
+		"ioredis": "^5.4.1",
+		"jsonwebtoken": "^9.0.2",
+		"mongoose": "^8.5.3"
+	}
+}
