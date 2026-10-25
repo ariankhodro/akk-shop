@@ -11,7 +11,8 @@
     "audit:inventory": "node scripts/audit-untracked-inventory.mjs",
     "start:all": "node scripts/start-all.mjs",
     "dev:all": "node scripts/dev-all.mjs",
-    "seed": "node scripts/seed-miba.mjs"
+    "seed": "node scripts/seed-miba.mjs",
+    "sync:tadarok": "node scripts/sync-tadarok.mjs"
   },
   "keywords": [],
   "author": "",
