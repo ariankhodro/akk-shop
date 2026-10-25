@@ -27,4 +27,7 @@ export const largeJsonBody = express.json({ limit: LARGE_JSON_LIMIT });
 export const globalJsonBody = express.json({
   limit: GLOBAL_JSON_LIMIT,
   type: (req) => isJsonContentType(req) && !isLargeJsonRoute(req),
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
 });

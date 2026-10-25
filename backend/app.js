@@ -18,6 +18,7 @@ import newsletterRoutes from "./routes/newsletter.route.js";
 import orderRoutes from "./routes/order.route.js";
 import adminRoutes from "./routes/admin.route.js";
 import serviceCaseRoutes from "./routes/service-case.route.js";
+import webhookRoutes from "./routes/webhook.route.js";
 import { apiRateLimit } from "./middleware/rate-limit.middleware.js";
 import { createReadyHandler } from "./lib/ready-handler.js";
 import { globalJsonBody } from "./middleware/body-parsers.middleware.js";
@@ -50,7 +51,7 @@ app.use(browserOriginAndCors);
 
 // Rate-limit before readiness/database middleware can trigger connection attempts.
 app.use("/api", (req, res, next) => {
-  if (req.path === "/health") return next();
+  if (req.path === "/health" || req.path.startsWith("/webhooks")) return next();
   return apiRateLimit(req, res, next);
 });
 
@@ -102,6 +103,7 @@ app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/service-cases", serviceCaseRoutes);
+app.use("/api/webhooks", webhookRoutes);
 
 app.use("/api", (_req, res) => res.status(404).json({ message: "API route not found" }));
 // Locally stored product/category images (MEDIA_STORAGE=local). File names are
