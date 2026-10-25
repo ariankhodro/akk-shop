@@ -140,12 +140,12 @@ function apiResponder(url) {
   if (path === "/api/products/" + PRODUCT_ID) return jsonResponse(product);
   if (path === "/api/products/" + SECOND_PRODUCT_ID) return jsonResponse(product);
   if (path === "/api/categories/jeans") return jsonResponse({ category });
-  if (path === "/api/categories/t-shirts") return jsonResponse({ message: "Category not found" }, 404);
+  if (path === "/api/categories/brakes") return jsonResponse({ message: "Category not found" }, 404);
   if (path === "/api/products/category/jeans") {
     return jsonResponse({ products: [product], pagination: { page: 1, limit: 8, total: 1, pages: 1 } });
   }
-  if (path === "/api/products/category/t-shirts") {
-    return jsonResponse({ products: [{ ...product, category: "t-shirts" }], pagination: { page: 1, limit: 8, total: 1, pages: 1 } });
+  if (path === "/api/products/category/brakes") {
+    return jsonResponse({ products: [{ ...product, category: "brakes" }], pagination: { page: 1, limit: 8, total: 1, pages: 1 } });
   }
   if (path === "/api/products/search") {
     return jsonResponse({ products: [product], pagination: { page: Number(url.searchParams.get("page") || 1), limit: Number(url.searchParams.get("limit") || 24), total: 2, totalPages: 2 } });
@@ -167,7 +167,7 @@ test("server SEO handlers return rendered HTML, accurate statuses, and dynamic s
       productResponse
     );
     assert.equal(productResponse.statusCode, 200);
-    assert.match(productResponse.body, /<title>پیراهن آبی \| تیک بوتیک<\/title>/);
+    assert.match(productResponse.body, /<title>پیراهن آبی \| میبا<\/title>/);
     assert.match(productResponse.body, /پیراهن نخی آبی با تن‌خور معمولی/);
     assert.match(productResponse.body, /سایزها:/);
     assert.match(productResponse.body, /<link rel="canonical" href="https:\/\/shop\.example\/product\/64f123456789abcdef123456">/);
@@ -187,11 +187,11 @@ test("server SEO handlers return rendered HTML, accurate statuses, and dynamic s
 
     const legacyCategoryResponse = createResponse();
     await sharePreviewHandler(
-      createRequest("/category/t-shirts", { type: "category", id: "t-shirts" }),
+      createRequest("/category/brakes", { type: "category", id: "brakes" }),
       legacyCategoryResponse
     );
     assert.equal(legacyCategoryResponse.statusCode, 200);
-    assert.match(legacyCategoryResponse.body, /تی‌شرت/);
+    assert.match(legacyCategoryResponse.body, /سیستم ترمز/);
     assert.match(legacyCategoryResponse.body, /پیراهن آبی/);
 
     const paginatedCategoryResponse = createResponse();

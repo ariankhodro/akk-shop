@@ -1,10 +1,10 @@
 import express from "express";
 import {
  login, logout, signup, refreshToken, getProfile, forgotPassword, resetPassword, saveDefaultAddress,
- updateProfile, createShippingAddress, updateShippingAddress, setDefaultShippingAddress, deleteShippingAddress,
+ updateProfile, changePassword, createShippingAddress, updateShippingAddress, setDefaultShippingAddress, deleteShippingAddress,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
-import { signupRateLimit, loginRateLimit, forgotPasswordRateLimit, resetPasswordRateLimit, refreshTokenRateLimit } from "../middleware/rate-limit.middleware.js";
+import { signupRateLimit, loginRateLimit, forgotPasswordRateLimit, resetPasswordRateLimit, refreshTokenRateLimit, changePasswordRateLimit } from "../middleware/rate-limit.middleware.js";
 
 const router = express.Router();
 router.post("/signup", signupRateLimit, signup);
@@ -15,6 +15,7 @@ router.post("/logout", logout);
 router.post("/refresh-token", refreshTokenRateLimit, refreshToken);
 router.get("/profile", protectRoute, getProfile);
 router.patch("/profile", protectRoute, updateProfile);
+router.post("/change-password", changePasswordRateLimit, protectRoute, changePassword);
 router.patch("/profile/default-address", protectRoute, saveDefaultAddress);
 router.post("/profile/addresses", protectRoute, createShippingAddress);
 router.patch("/profile/addresses/:addressId", protectRoute, updateShippingAddress);

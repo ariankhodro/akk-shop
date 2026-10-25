@@ -11,6 +11,9 @@ import Order from "../models/order.model.js";
 import { normalizePersianText, escapeSearchRegex, buildNormalizedProductSearchText } from "../lib/persian-search.js";
 import { applyStockDelta, stockConflictError } from "../lib/inventory-stock.js";
 import { recordAuditEvent } from "../lib/audit-log.js";
+import { normalizePartFields, normalizeWholesaleTerms } from "../lib/part-fields.js";
+import { WHOLESALE_FIELDS, presentProductsForViewer } from "../lib/pricing.js";
+import { compactPartNumber } from "../lib/persian-search.js";
 
 const idOf = (value) => value == null ? "" : String(value);
 const PRODUCT_IMAGE_FOLDER = "products";
@@ -26,6 +29,40 @@ const MAX_PUBLIC_PAGE = 200;
 // SEC-10: never expose Mongo internals on public reads. Stock numbers stay
 // because the storefront cart/product UI relies on exact values (documented).
 const PUBLIC_PRODUCT_PROJECTION = "-__v";
+const forViewer = (req, products) => presentProductsForViewer(products, req.user, Product);
+
+// Vehicle / part filters shared by the shop and category listings.
+const readFilterValues = (input, maxItems, maxLength = 80) => {
+  const source = input === undefined ? [] : Array.isArray(input) ? input : [input];
+  return source
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim().slice(0, maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems);
+};
+const QUALITY_VALUES = new Set(["genuine", "oem", "aftermarket", "used"]);
+const partFilterClauses = (query) => {
+  const clauses = [];
+  const make = readFilterValues(query.make, 1, 60)[0];
+  const model = readFilterValues(query.model, 1, 80)[0];
+  const year = Number(query.year);
+  if (make) {
+    const fitment = { make };
+    if (model) fitment.model = model;
+    if (Number.isInteger(year) && year >= 1950 && year <= 2100) {
+      fitment.$and = [
+        { $or: [{ yearFrom: null }, { yearFrom: { $lte: year } }] },
+        { $or: [{ yearTo: null }, { yearTo: { $gte: year } }] },
+      ];
+    }
+    clauses.push({ fitments: { $elemMatch: fitment } });
+  }
+  const brands = readFilterValues(query.partBrand, 24, 80);
+  if (brands.length) clauses.push({ brand: { $in: brands } });
+  const qualities = readFilterValues(query.quality, 4, 16).filter((value) => QUALITY_VALUES.has(value));
+  if (qualities.length) clauses.push({ quality: { $in: qualities } });
+  return clauses;
+};
 
 // SEC-16: free-form attributes (products without a category definition) are
 // stored as Mixed. Bound size, depth and key shape before storing them.
@@ -175,6 +212,8 @@ export const getAllProducts = async (req, res) => {
         { name: rawPattern },
         { description: rawPattern },
         { category: rawPattern },
+        { sku: rawPattern },
+        { oemNumbers: rawPattern },
       ] });
     }
     if (category) {
@@ -211,7 +250,7 @@ export const getAllProducts = async (req, res) => {
         : { createdAt: -1, _id: -1 };
     const [total, products] = await Promise.all([
       Product.countDocuments(filter).maxTimeMS(1500),
-      Product.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
+      Product.find(filter).select(WHOLESALE_FIELDS).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
     ]);
     return res.json({ products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
@@ -224,7 +263,8 @@ export const getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({ _id: req.params.id, isActive: { $ne: false } }).select(PUBLIC_PRODUCT_PROJECTION).lean();
     if (!product) return res.status(404).json({ message: "Product not found" });
-    return res.json(product);
+    const [presented] = await forViewer(req, [product]);
+    return res.json(presented);
   } catch (error) {
     if (error.name === "CastError") return res.status(400).json({ message: "Invalid product ID" });
     console.error("Error in getProductById controller", error.message);
@@ -232,14 +272,14 @@ export const getProductById = async (req, res) => {
   }
 };
 
-export const getFeaturedProducts = async (_req, res) => {
-  const cached = await readJsonCache("featured_products_v2");
-  if (Array.isArray(cached)) return res.json(cached);
+export const getFeaturedProducts = async (req, res) => {
   try {
+    const cached = await readJsonCache("featured_products_v2");
+    if (Array.isArray(cached)) return res.json(await forViewer(req, cached));
     const featuredProducts = await Product.find({ isFeatured: true, isActive: { $ne: false } })
       .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(100).maxTimeMS(1500).lean();
     await writeJsonCache("featured_products_v2", featuredProducts, 300);
-    return res.json(featuredProducts);
+    return res.json(await forViewer(req, featuredProducts));
   } catch (error) {
     console.error("Error in getFeaturedProducts controller", error.message);
     return res.status(500).json({ message: "Server error" });
@@ -251,7 +291,7 @@ export const getNewestProducts = async (req, res) => {
     const limit = clampInteger(req.query.limit, 8, 1, 24);
     const products = await Product.find({ isActive: { $ne: false } })
       .select(PUBLIC_PRODUCT_PROJECTION).sort({ createdAt: -1, _id: -1 }).limit(limit).lean();
-    return res.json({ products });
+    return res.json({ products: await forViewer(req, products) });
   } catch (error) {
     console.error("Error in getNewestProducts controller", error.message);
     return res.status(500).json({ message: "Server error" });
@@ -321,10 +361,18 @@ export const getSearchedProducts = async (req, res) => {
         filter.category = category;
       }
     }
+    const extraClauses = partFilterClauses(req.query);
+    if (["1", "true"].includes(String(req.query.inStock || "").toLowerCase())) {
+      extraClauses.push({ $or: [
+        { variants: { $elemMatch: { stock: { $gt: 0 } } } },
+        { $and: [{ stock: { $gt: 0 } }, { $or: [{ variants: { $size: 0 } }, { variants: { $exists: false } }] }] },
+      ] });
+    }
+    const compactQuery = compactPartNumber(rawQuery);
     if (q) {
       // Match each normalized token so word order is flexible in Persian and Latin queries.
       const tokens = [...new Set(q.split(" ").filter(Boolean))].slice(0, 8);
-      filter.$and = tokens.map((token) => {
+      const tokenClauses = tokens.map((token) => {
         const expression = new RegExp(escapeSearchRegex(token));
         return {
           $or: [
@@ -336,7 +384,12 @@ export const getSearchedProducts = async (req, res) => {
           ],
         };
       });
+      // A part number typed with or without dashes/spaces matches directly.
+      extraClauses.push(compactQuery.length >= 4
+        ? { $or: [{ $and: tokenClauses }, { searchTextNormalized: new RegExp(escapeSearchRegex(compactQuery)) }] }
+        : { $and: tokenClauses });
     }
+    if (extraClauses.length) filter.$and = extraClauses;
     if (minPrice !== null || maxPrice !== null) {
       filter.price = {};
       if (minPrice !== null) filter.price.$gte = minPrice;
@@ -358,7 +411,7 @@ export const getSearchedProducts = async (req, res) => {
       Product.countDocuments(filter).maxTimeMS(1500),
       Product.find(filter).select(PUBLIC_PRODUCT_PROJECTION).sort(sort).skip((page - 1) * limit).limit(limit).maxTimeMS(1500).lean(),
     ]);
-    return res.json({ products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    return res.json({ products: await forViewer(req, products), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
     console.error("Error in getSearchedProducts controller", error.message);
     return res.status(500).json({ message: "Server error" });
@@ -461,6 +514,14 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Size measurements must be non-negative numbers" });
     }
 
+    const partFields = normalizePartFields(req.body);
+    if (partFields.error) return res.status(400).json({ message: partFields.error });
+    const wholesaleTerms = normalizeWholesaleTerms(req.body, numericPrice);
+    if (wholesaleTerms.error) return res.status(400).json({ message: wholesaleTerms.error });
+    if (partFields.values.sku && await Product.exists({ sku: partFields.values.sku })) {
+      return res.status(409).json({ message: "کالای دیگری با همین کد کالا ثبت شده است." });
+    }
+
     const resolvedImages = await resolveManagedImageList(productImageInputs(images, image), {
       folder: PRODUCT_IMAGE_FOLDER,
       maxBytes: MAX_PRODUCT_IMAGE_BYTES,
@@ -484,6 +545,8 @@ export const createProduct = async (req, res) => {
       fit: normalizedFit,
       sizeChart: normalizedSizeChart,
       stock: normalizedVariants.length ? null : numericStock,
+      ...partFields.values,
+      ...wholesaleTerms.values,
     });
     pendingUploadedImages = [];
     await recordAuditEvent(req, {
@@ -508,6 +571,10 @@ export const createProduct = async (req, res) => {
           fit: product.fit,
           sizeChart: product.sizeChart,
           stock: product.stock,
+          sku: product.sku,
+          brand: product.brand,
+          wholesalePrice: product.wholesalePrice,
+          wholesaleMinQuantity: product.wholesaleMinQuantity,
           isFeatured: product.isFeatured,
           isActive: product.isActive,
         },
@@ -522,6 +589,7 @@ export const createProduct = async (req, res) => {
     if (error?.name === "ValidationError" || error?.name === "CastError") {
       return res.status(400).json({ message: "اطلاعات محصول معتبر نیست." });
     }
+    if (error?.code === 11000) return res.status(409).json({ message: "کالای دیگری با همین کد کالا ثبت شده است." });
     console.error("Error in createProduct controller", error.message);
     return res.status(500).json({ message: "Unable to create product" });
   }
@@ -530,7 +598,7 @@ export const createProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
   let pendingUploadedImages = [];
   try {
-    let product = await Product.findById(req.params.id);
+    let product = await Product.findById(req.params.id, WHOLESALE_FIELDS);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     const body = req.body || {};
@@ -625,6 +693,14 @@ export const updateProduct = async (req, res) => {
       return res.status(400).json({ message: "اندازه‌های جدول سایز باید عددی نامنفی باشند." });
     }
 
+    const partFields = normalizePartFields(body);
+    if (partFields.error) return res.status(400).json({ message: partFields.error });
+    const wholesaleTerms = normalizeWholesaleTerms(body, numericPrice);
+    if (wholesaleTerms.error) return res.status(400).json({ message: wholesaleTerms.error });
+    if (partFields.values.sku && await Product.exists({ sku: partFields.values.sku, _id: { $ne: product._id } })) {
+      return res.status(409).json({ message: "کالای دیگری با همین کد کالا ثبت شده است." });
+    }
+
     const previousImages = [product.image, ...(product.images || [])].filter(Boolean);
     // Omitting both fields keeps the current gallery instead of wiping it.
     const imagesProvided = body.images !== undefined || body.image !== undefined;
@@ -654,6 +730,13 @@ export const updateProduct = async (req, res) => {
       fit: item.fit,
       sizeChart: item.sizeChart || [],
       stock: item.stock,
+      sku: item.sku || "",
+      oemNumbers: item.oemNumbers || [],
+      brand: item.brand || "",
+      quality: item.quality || "",
+      fitments: (item.fitments || []).map(({ make, model, engine, yearFrom, yearTo }) => ({ make, model, engine, yearFrom, yearTo })),
+      wholesalePrice: item.wholesalePrice ?? null,
+      wholesaleMinQuantity: item.wholesaleMinQuantity ?? 1,
       isFeatured: item.isFeatured,
       isActive: item.isActive,
     });
@@ -677,6 +760,7 @@ export const updateProduct = async (req, res) => {
     const searchSource = {
       name, description, category: productCategory, sizes: normalizedSizes, colors: normalizedColors,
       fit: normalizedFit, attributes: normalizedAttributes.values || {},
+      ...partFields.values,
     };
 
     let saved = null;
@@ -717,9 +801,11 @@ export const updateProduct = async (req, res) => {
           fit: normalizedFit,
           sizeChart: normalizedSizeChart,
           stock: nextStock,
+          ...partFields.values,
+          ...wholesaleTerms.values,
           searchTextNormalized: buildNormalizedProductSearchText({ ...searchSource, variants: nextVariants }),
         },
-      }, { new: true, runValidators: true });
+      }, { new: true, runValidators: true, projection: WHOLESALE_FIELDS });
     }
     if (!saved) throw stockConflictError("STOCK_CONFLICT");
     product = saved;
@@ -747,6 +833,8 @@ export const updateProduct = async (req, res) => {
     if (error.code === "STOCK_CONFLICT") {
       return res.status(409).json({ message: "موجودی هم‌زمان تغییر کرد؛ صفحه را تازه‌سازی و دوباره تلاش کنید." });
     }
+    if (error.code === 11000) return res.status(409).json({ message: "کالای دیگری با همین کد کالا ثبت شده است." });
+    if (error.name === "ValidationError") return res.status(400).json({ message: "اطلاعات محصول معتبر نیست." });
     console.error("Error updating product", error.message);
     return res.status(500).json({ message: "به‌روزرسانی محصول ناموفق بود." });
   }
@@ -931,17 +1019,17 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-export const getRecommendedProducts = async (_req, res) => {
+export const getRecommendedProducts = async (req, res) => {
   try {
     const cached = await readJsonCache("recommended_products_v1");
-    if (Array.isArray(cached)) return res.json(cached);
+    if (Array.isArray(cached)) return res.json(await forViewer(req, cached));
     const products = await Product.aggregate([
       { $match: { isActive: { $ne: false } } },
       { $sample: { size: 4 } },
-      { $project: { _id: 1, name: 1, description: 1, image: 1, price: 1, category: 1, stock: 1 } },
+      { $project: { _id: 1, name: 1, description: 1, image: 1, price: 1, category: 1, stock: 1, brand: 1, sku: 1, quality: 1 } },
     ]).option({ maxTimeMS: 1500 });
     await writeJsonCache("recommended_products_v1", products, 60);
-    return res.json(products);
+    return res.json(await forViewer(req, products));
   } catch (error) {
     console.error("Error in getRecommendedProducts controller", error.message);
     return res.status(500).json({ message: "Server error" });
@@ -991,9 +1079,14 @@ export const getProductsByCategory = async (req, res) => {
           { "fit.type": rawPattern },
           { "attributes.brand": rawPattern },
           { "attributes.brandName": rawPattern },
+          { sku: rawPattern },
+          { oemNumbers: rawPattern },
+          { "fitments.make": rawPattern },
+          { "fitments.model": rawPattern },
         ],
       });
     }
+    clauses.push(...partFilterClauses(req.query));
 
     const parsePriceBound = (value) => {
       if (value === undefined || value === null || String(value).trim() === "") return { valid: true, value: null };
@@ -1108,7 +1201,7 @@ export const getProductsByCategory = async (req, res) => {
 
     const facetCacheKey = "category_filter_facets_v2:" + slug;
     let filterOptions = await readJsonCache(facetCacheKey);
-    if (!filterOptions || !Array.isArray(filterOptions.sizes) || !Array.isArray(filterOptions.colors)) {
+    if (!filterOptions || !Array.isArray(filterOptions.sizes) || !Array.isArray(filterOptions.colors) || !Array.isArray(filterOptions.makes)) {
       const facetResult = await Product.aggregate([
         { $match: { $and: baseClauses } },
         {
@@ -1158,6 +1251,17 @@ export const getProductsByCategory = async (req, res) => {
               { $sort: { _id: 1 } },
               { $limit: 100 },
             ],
+            makes: [
+              { $unwind: "$fitments" },
+              { $group: { _id: "$fitments.make", models: { $addToSet: "$fitments.model" } } },
+              { $sort: { _id: 1 } },
+              { $limit: 60 },
+            ],
+            qualities: [
+              { $match: { quality: { $type: "string", $ne: "" } } },
+              { $group: { _id: "$quality" } },
+              { $sort: { _id: 1 } },
+            ],
           },
         },
       ]).option({ maxTimeMS: 2500 });
@@ -1175,6 +1279,11 @@ export const getProductsByCategory = async (req, res) => {
         colors: [...colorMap.values()].sort((a, b) => a.name.localeCompare(b.name, "fa")),
         fits: (rawFacets.fits || []).map((item) => item._id).filter((value) => typeof value === "string" && value.trim()),
         brands: (rawFacets.brands || []).map((item) => item._id).filter((value) => typeof value === "string" && value.trim()),
+        makes: (rawFacets.makes || []).filter((item) => typeof item._id === "string" && item._id.trim()).map((item) => ({
+          make: item._id,
+          models: (item.models || []).filter((value) => typeof value === "string" && value.trim()).sort((a, b) => a.localeCompare(b, "fa")),
+        })),
+        qualities: (rawFacets.qualities || []).map((item) => item._id).filter((value) => typeof value === "string"),
       };
       await writeJsonCache(facetCacheKey, filterOptions, 120);
     }
@@ -1192,7 +1301,7 @@ export const getProductsByCategory = async (req, res) => {
     const min = Number(stats?.minPrice);
     const max = Number(stats?.maxPrice);
     return res.json({
-      products,
+      products: await forViewer(req, products),
       priceBounds: {
         minPrice: Number.isFinite(min) ? Math.max(0, Math.floor(min)) : 0,
         maxPrice: Number.isFinite(max) ? Math.max(0, Math.ceil(max)) : 0,
@@ -1249,7 +1358,7 @@ export const getBestsellingProducts = async (req, res) => {
   const limit = clampInteger(req.query.limit, 8, 1, 24);
   const cacheKey = `bestselling_products_v2:${limit}`;
   const cached = await readJsonCache(cacheKey);
-  if (Array.isArray(cached)) return res.json({ products: cached });
+  if (Array.isArray(cached)) return res.json({ products: await forViewer(req, cached) });
   try {
     const products = await Order.aggregate([
       { $match: { paymentStatus: "paid", status: "paid" } },
@@ -1272,12 +1381,70 @@ export const getBestsellingProducts = async (req, res) => {
       { $limit: limit },
       // SEC-10: sales volume is used for ranking only and must not be exposed.
       { $replaceRoot: { newRoot: "$product" } },
-      { $project: { __v: 0, searchTextNormalized: 0 } },
+      { $project: { __v: 0, searchTextNormalized: 0, wholesalePrice: 0, wholesaleMinQuantity: 0 } },
     ]).option({ maxTimeMS: 2500 });
     await writeJsonCache(cacheKey, products, 60);
-    return res.json({ products });
+    return res.json({ products: await forViewer(req, products) });
   } catch (error) {
     console.error("Error loading best-selling products", error.message);
     return res.status(500).json({ message: "Unable to load best-selling products" });
+  }
+};
+
+
+// Vehicle makes/models that have at least one active part, for the fitment
+// finder. Public, cached, contains no prices.
+export const getVehicleCatalog = async (_req, res) => {
+  const cacheKey = "vehicle_catalog_v1";
+  try {
+    const cached = await readJsonCache(cacheKey);
+    if (Array.isArray(cached)) return res.json({ makes: cached });
+    const rows = await Product.aggregate([
+      { $match: { isActive: { $ne: false } } },
+      { $unwind: "$fitments" },
+      { $match: { "fitments.make": { $type: "string", $ne: "" } } },
+      { $group: { _id: { make: "$fitments.make", model: "$fitments.model" }, count: { $sum: 1 } } },
+      { $sort: { "_id.make": 1, "_id.model": 1 } },
+      { $limit: 500 },
+    ]).option({ maxTimeMS: 2000 });
+    const byMake = new Map();
+    for (const row of rows) {
+      const make = row._id.make;
+      if (!byMake.has(make)) byMake.set(make, { make, models: [], partCount: 0 });
+      const entry = byMake.get(make);
+      entry.partCount += row.count;
+      if (typeof row._id.model === "string" && row._id.model.trim()) entry.models.push(row._id.model);
+    }
+    const makes = [...byMake.values()];
+    await writeJsonCache(cacheKey, makes, 300);
+    return res.json({ makes });
+  } catch (error) {
+    console.error("Error loading vehicle catalog", error.message);
+    return res.status(500).json({ message: "دریافت فهرست خودروها ناموفق بود." });
+  }
+};
+
+// Resolve a list of part numbers (SKU or OEM, separators ignored) to active
+// products. Used by the wholesale quick-order form; prices follow the viewer.
+export const lookupPartNumbers = async (req, res) => {
+  const raw = typeof req.query.codes === "string" ? req.query.codes.slice(0, 2000) : "";
+  const codes = [...new Set(raw.split(/[,،;\n]+/).map(compactPartNumber).filter((code) => code.length >= 3))].slice(0, 50);
+  if (!codes.length) return res.json({ results: [] });
+  try {
+    const candidates = await Product.find({
+      isActive: { $ne: false },
+      $or: codes.map((code) => ({ searchTextNormalized: new RegExp("(^| )" + escapeSearchRegex(code) + "( |$)") })),
+    }).select(PUBLIC_PRODUCT_PROJECTION).limit(200).maxTimeMS(1500).lean();
+    const presented = await forViewer(req, candidates);
+    const results = codes.map((code) => {
+      const product = presented.find((item) =>
+        compactPartNumber(item.sku) === code || (item.oemNumbers || []).some((value) => compactPartNumber(value) === code)
+      );
+      return { code, product: product || null };
+    });
+    return res.json({ results });
+  } catch (error) {
+    console.error("Error looking up part numbers", error.message);
+    return res.status(500).json({ message: "جستجوی کد کالا ناموفق بود." });
   }
 };

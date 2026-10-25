@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">تیک بوتیک</title>
-  <rect width="64" height="64" rx="16" fill="#252722"/>
-  <path d="M17 18h30v7H36v22h-8V25H17z" fill="#f7f5f0"/>
-  <circle cx="46" cy="46" r="7" fill="#9baa8e"/>
+  <title id="title">میبا MIBA</title>
+  <rect width="64" height="64" rx="16" fill="#ea580c"/>
+  <path d="M14 46V18h7l11 15 11-15h7v28h-7V30l-11 14-11-14v16z" fill="#fff"/>
 </svg>

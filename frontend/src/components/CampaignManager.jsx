@@ -138,7 +138,7 @@ const CampaignManager = () => {
     }
   };
 
-  const fieldClass = "mt-1 w-full rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] px-3 py-2 text-sm text-[var(--ui-text)] outline-none focus:border-[var(--ui-accent)] focus:ring-2 focus:ring-[#68745f]/30";
+  const fieldClass = "mt-1 w-full rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] px-3 py-2 text-sm text-[var(--ui-text)] outline-none focus:border-[var(--ui-accent)] focus:ring-2 focus:ring-[#ea580c]/30";
 
   return (
     <section dir="rtl" className="mx-auto max-w-5xl space-y-8">
@@ -193,10 +193,10 @@ const CampaignManager = () => {
                     <p className="mt-1 text-xs text-[var(--ui-muted)]">{new Intl.NumberFormat("fa-IR").format((campaign.productIds || []).length)} محصول مرتبط</p>
                     <p className="mt-1 text-xs text-[var(--ui-muted)]">مراجعه: {new Intl.NumberFormat("fa-IR").format(campaign.views || 0)} · کلیک دکمه اصلی: {new Intl.NumberFormat("fa-IR").format(campaign.clicks || 0)}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-3">
-                      <Link to={getCampaignPath(campaign)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#9aa58e] hover:text-[var(--ui-text)]">
+                      <Link to={getCampaignPath(campaign)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#fb923c] hover:text-[var(--ui-text)]">
                         بازکردن صفحه اختصاصی<ExternalLink size={13} aria-hidden="true" />
                       </Link>
-                      <button type="button" onClick={() => copyCampaignLink(campaign)} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-[var(--ui-border)] px-2.5 text-xs text-[var(--ui-muted)] transition hover:border-[#9aa58e] hover:text-[var(--ui-text)]">
+                      <button type="button" onClick={() => copyCampaignLink(campaign)} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-[var(--ui-border)] px-2.5 text-xs text-[var(--ui-muted)] transition hover:border-[#fb923c] hover:text-[var(--ui-text)]">
                         <Copy size={13} aria-hidden="true" />کپی لینک عمومی
                       </button>
                     </div>

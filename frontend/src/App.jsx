@@ -7,7 +7,7 @@ import StoreFooter from "./components/StoreFooter";
 import LoadingSpinner from "./components/LoadingSpinner";
 import PageMeta from "./components/PageMeta";
 import { PRIVATE_ROUTE_META } from "./lib/seo-utils.js";
-import { useUserStore } from "./stores/useUserStore";
+import { isWholesaleUser, useUserStore } from "./stores/useUserStore";
 import { useCartStore } from "./stores/useCartStore";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -31,9 +31,16 @@ const CampaignPage = lazy(() => import("./pages/CampaignPage"));
 const CampaignsPage = lazy(() => import("./pages/CampaignsPage"));
 const CollectionPage = lazy(() => import("./pages/CollectionPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const ChangePasswordPage = lazy(() => import("./pages/ChangePasswordPage"));
+const WholesaleQuickOrderPage = lazy(() => import("./pages/WholesaleQuickOrderPage"));
+
+const ACCOUNT_ROUTE_META = {
+  "/account/change-password": { title: "تغییر رمز عبور", description: "تعیین رمز عبور جدید برای حساب کاربری میبا." },
+  "/wholesale/quick-order": { title: "سفارش سریع همکاران", description: "سفارش عمده قطعات یدکی با کد فنی در میبا." },
+};
 
 const privateRoutePage = (path, element) => {
-  const meta = PRIVATE_ROUTE_META[path];
+  const meta = PRIVATE_ROUTE_META[path] || ACCOUNT_ROUTE_META[path];
   return <>{meta && <PageMeta title={meta.title} description={meta.description} path={path} robots="noindex, nofollow" canonical={false} />}{element}</>;
 };
 
@@ -69,6 +76,14 @@ function App() {
 
   if (checkingAuth) return <LoadingSpinner />;
 
+  // A temporary password issued by an administrator must be replaced before
+  // the account is used for anything else (the server still enforces access).
+  const mustChangePassword = user?.mustChangePassword === true;
+  const allowedWhilePasswordPending = ["/account/change-password", "/support", "/faq", "/privacy-policy", "/terms-of-use"];
+  if (mustChangePassword && !allowedWhilePasswordPending.includes(location.pathname)) {
+    return <Navigate to="/account/change-password" replace />;
+  }
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--ui-canvas)] text-[var(--ui-text)]">
       <div className={`relative z-50 ${isAccountPage ? "pt-0" : "pt-32 md:pt-44 min-[1680px]:pt-32"}`}>
@@ -80,7 +95,6 @@ function App() {
             <Route path="/new-arrivals" element={<CollectionPage type="newest" />} />
             <Route path="/bestsellers" element={<CollectionPage type="bestsellers" />} />
             <Route path="/featured-products" element={<CollectionPage type="featured" />} />
-            <Route path="/looks/:slug" element={<CollectionPage type="look" />} />
             <Route path="/campaigns" element={<CampaignsPage />} />
             <Route path="/campaign/:campaignId" element={<CampaignPage />} />
             <Route path="/signup" element={!user ? privateRoutePage("/signup", <SignUpPage />) : <Navigate to={location.state?.from?.pathname || "/"} />} />
@@ -88,6 +102,8 @@ function App() {
             <Route path="/forgot-password" element={privateRoutePage("/forgot-password", <ForgotPasswordPage />)} />
             <Route path="/reset-password" element={privateRoutePage("/reset-password", <ResetPasswordPage />)} />
             <Route path="/secret-dashboard" element={privateRoutePage("/secret-dashboard", user?.role === "admin" ? <AdminPage /> : <Navigate to="/login" />)} />
+            <Route path="/account/change-password" element={user ? privateRoutePage("/account/change-password", <ChangePasswordPage />) : <Navigate to="/login" state={{ from: { pathname: "/account/change-password" } }} />} />
+            <Route path="/wholesale/quick-order" element={isWholesaleUser(user) ? privateRoutePage("/wholesale/quick-order", <WholesaleQuickOrderPage />) : <Navigate to={user ? "/" : "/login?wholesale=1"} state={user ? undefined : { from: { pathname: "/wholesale/quick-order" } }} replace />} />
             <Route path="/category/:slug" element={<CategoryPage />} />
             <Route path="/product/:productId" element={<ProductDetailsPage />} />
             <Route path="/cart" element={privateRoutePage("/cart", <CartPage />)} />

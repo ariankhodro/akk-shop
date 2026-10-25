@@ -58,7 +58,7 @@ const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) 
   return (
     <div className="relative block text-sm text-gray-300">
       <label htmlFor={id} className="flex items-center gap-2">
-        <CalendarClock size={15} className="text-[#68745f]" aria-hidden="true" />
+        <CalendarClock size={15} className="text-[#ea580c]" aria-hidden="true" />
         {label}
       </label>
       <div className="mt-1 flex gap-2">
@@ -80,7 +80,7 @@ const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) 
           className={"min-w-0 flex-1 rounded-lg border bg-gray-700 px-3 py-2 text-center text-sm tabular-nums text-white outline-none transition focus:ring-2 " +
             (showError
               ? "border-red-500 focus:border-red-400 focus:ring-red-500/20"
-              : "border-gray-600 focus:border-[#68745f] focus:ring-[#68745f]/30")}
+              : "border-gray-600 focus:border-[#ea580c] focus:ring-[#ea580c]/30")}
         />
         <button
           type="button"
@@ -88,7 +88,7 @@ const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) 
           aria-label={showPicker ? "بستن تقویم شمسی" : "انتخاب تاریخ و ساعت شمسی"}
           aria-expanded={showPicker}
           aria-controls={id + "-jalali-picker"}
-          className="inline-flex min-w-11 items-center justify-center rounded-lg border border-gray-600 bg-gray-700 px-3 text-gray-100 transition hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#68745f]"
+          className="inline-flex min-w-11 items-center justify-center rounded-lg border border-gray-600 bg-gray-700 px-3 text-gray-100 transition hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ea580c]"
         >
           <CalendarDays size={18} aria-hidden="true" />
         </button>
@@ -134,8 +134,8 @@ const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) 
                   onClick={() => chooseDay(day)}
                   aria-pressed={selected}
                   aria-label={day + " " + formatIranianMonthTitle(shownYear, shownMonth)}
-                  className={"inline-flex h-9 items-center justify-center rounded-lg text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#68745f] " +
-                    (selected ? "bg-[#68745f] font-bold text-white" : "hover:bg-gray-800")}
+                  className={"inline-flex h-9 items-center justify-center rounded-lg text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ea580c] " +
+                    (selected ? "bg-[#ea580c] font-bold text-white" : "hover:bg-gray-800")}
                 >
                   {day.toLocaleString("fa-IR")}
                 </button>
@@ -151,14 +151,14 @@ const IranianDateTimeInput = ({ id, label, value, onChange, required = false }) 
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-gray-400">
                 ساعت
-                <input type="number" min="0" max="23" value={hour} onChange={(event) => updateTime(Math.max(0, Math.min(23, Number(event.target.value) || 0)), minute)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none focus:border-[#68745f]" />
+                <input type="number" min="0" max="23" value={hour} onChange={(event) => updateTime(Math.max(0, Math.min(23, Number(event.target.value) || 0)), minute)} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none focus:border-[#ea580c]" />
               </label>
               <label className="text-xs text-gray-400">
                 دقیقه
-                <input type="number" min="0" max="59" value={minute} onChange={(event) => updateTime(hour, Math.max(0, Math.min(59, Number(event.target.value) || 0)))} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none focus:border-[#68745f]" />
+                <input type="number" min="0" max="59" value={minute} onChange={(event) => updateTime(hour, Math.max(0, Math.min(59, Number(event.target.value) || 0)))} className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none focus:border-[#ea580c]" />
               </label>
             </div>
-            <button type="button" onClick={() => setShowPicker(false)} className="mt-4 w-full rounded-lg bg-[#68745f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#41443b]">
+            <button type="button" onClick={() => setShowPicker(false)} className="mt-4 w-full rounded-lg bg-[#ea580c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#33373e]">
               تأیید تاریخ و ساعت
             </button>
           </div>

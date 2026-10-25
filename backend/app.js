@@ -26,6 +26,7 @@ import { requestContext } from "./middleware/request-context.middleware.js";
 import { trustProxyHops } from "./lib/config.js";
 import { createFrontendServer } from "./middleware/serve-frontend.middleware.js";
 import { logger, errorFields } from "./lib/logger.js";
+import { mediaStorageMode, uploadsDirectory } from "./lib/image-upload.js";
 
 const app = express();
 
@@ -103,6 +104,23 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/service-cases", serviceCaseRoutes);
 
 app.use("/api", (_req, res) => res.status(404).json({ message: "API route not found" }));
+// Locally stored product/category images (MEDIA_STORAGE=local). File names are
+// random and immutable; nothing here is executable or listable.
+if (mediaStorageMode() === "local") {
+  app.use("/uploads", express.static(uploadsDirectory(), {
+    index: false,
+    dotfiles: "deny",
+    redirect: false,
+    fallthrough: false,
+    maxAge: "365d",
+    immutable: true,
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    },
+  }));
+}
 // Optional: serve the built storefront from this process (single-command deployments).
 if (process.env.SERVE_FRONTEND === "true") app.use(await createFrontendServer());
 
@@ -113,6 +131,11 @@ app.use((error, _req, res, next) => {
   }
   if (error instanceof SyntaxError && (error.status === 400 || error.statusCode === 400) && "body" in error) {
     return res.status(400).json({ message: "Invalid JSON request body" });
+  }
+  // http-errors raised by middleware (static files: 404/403, malformed URLs: 400).
+  const status = Number(error?.status || error?.statusCode);
+  if (error?.expose === true && Number.isInteger(status) && status >= 400 && status < 500) {
+    return res.status(status).json({ message: status === 404 ? "Not found" : "Bad request" });
   }
   logger.error("unhandled_api_error", { requestId: _req.id, method: _req.method, path: _req.path, ...errorFields(error) });
   return res.status(500).json({ message: "Internal server error", requestId: _req.id });

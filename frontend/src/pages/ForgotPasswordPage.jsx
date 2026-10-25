@@ -18,24 +18,24 @@ const ForgotPasswordPage = () => {
       setError(requestError.response?.data?.message || "درخواست بازیابی ناموفق بود.");
     } finally { setLoading(false); }
   };
-  const field = "mt-2 w-full rounded-xl border border-[#dedbd2] bg-white px-4 py-3 text-sm text-[#252722] outline-none focus:border-[#68745f] focus:ring-4 focus:ring-[#68745f]/10";
-  return <main className="flex min-h-screen items-center justify-center bg-[#f7f5f0] px-4 py-10 text-[#252722]">
-    <PageMeta title="بازیابی رمز عبور" description="دریافت لینک امن برای تغییر رمز عبور حساب تیک بوتیک." path="/forgot-password" robots="noindex, nofollow" />
-    <section dir="rtl" className="w-full max-w-md rounded-3xl border border-[#e5e0d6] bg-[#fffefa] p-6 shadow-xl sm:p-9">
-      <Link to="/" className="font-serif text-2xl font-semibold">تیک بوتیک</Link>
+  const field = "mt-2 w-full rounded-xl border border-[#dde1e6] bg-white px-4 py-3 text-sm text-[#1c1f24] outline-none focus:border-[#ea580c] focus:ring-4 focus:ring-[#ea580c]/10";
+  return <main className="flex min-h-screen items-center justify-center bg-[#f5f6f8] px-4 py-10 text-[#1c1f24]">
+    <PageMeta title="بازیابی رمز عبور" description="دریافت لینک امن برای تغییر رمز عبور حساب میبا." path="/forgot-password" robots="noindex, nofollow" />
+    <section dir="rtl" className="w-full max-w-md rounded-3xl border border-[#e1e4e9] bg-[#ffffff] p-6 shadow-xl sm:p-9">
+      <Link to="/" className="font-serif text-2xl font-semibold">میبا</Link>
       <h1 className="mt-8 text-2xl font-bold">بازیابی رمز عبور</h1>
-      <p className="mt-2 text-sm leading-6 text-[#77786f]">ایمیلی را که هنگام ساخت حساب استفاده کرده‌اید وارد کنید.</p>
+      <p className="mt-2 text-sm leading-6 text-[#6b717b]">ایمیلی را که هنگام ساخت حساب استفاده کرده‌اید وارد کنید.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <label htmlFor="recovery-email" className="block text-sm font-medium">ایمیل
           <input id="recovery-email" name="email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} className={field} dir="ltr" />
         </label>
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        {message && <p role="status" className="rounded-xl bg-[#e9ede4] p-3 text-sm leading-6 text-[#41443b]">{message}</p>}
-        <button type="submit" disabled={loading} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#252722] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
+        {message && <p role="status" className="rounded-xl bg-[#fff1e7] p-3 text-sm leading-6 text-[#33373e]">{message}</p>}
+        <button type="submit" disabled={loading} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1c1f24] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
           {loading ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Mail size={17} aria-hidden="true" />}ارسال راهنمای بازیابی
         </button>
       </form>
-      <Link to="/login" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#68745f]"><ArrowLeft size={15} aria-hidden="true" />بازگشت به ورود</Link>
+      <Link to="/login" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#ea580c]"><ArrowLeft size={15} aria-hidden="true" />بازگشت به ورود</Link>
     </section>
   </main>;
 };

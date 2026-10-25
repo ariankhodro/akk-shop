@@ -45,6 +45,9 @@ Generated sections come from code (`node scripts/generate-permission-matrix.mjs`
 | PUT | `/api/shipping` | settings.manage |
 | GET | `/api/admin/customers` | roles.manage (if held) else customers.manage |
 | PATCH | `/api/admin/customers/:id/access` | roles.manage |
+| POST | `/api/admin/customers` | wholesale.manage |
+| PATCH | `/api/admin/customers/:id/wholesale` | wholesale.manage |
+| POST | `/api/admin/customers/:id/password` | wholesale.manage |
 | GET | `/api/admin/service-cases` | support.manage |
 | PATCH | `/api/admin/service-cases/:id` | support.manage **or** refunds.manage |
 | GET | `/api/admin/inventory` | inventory.manage |
@@ -53,21 +56,22 @@ Generated sections come from code (`node scripts/generate-permission-matrix.mjs`
 
 ### Role presets (generated)
 
-| Permission | owner | manager | catalogue_editor | fulfillment | support | marketing | analyst |
-|---|---|---|---|---|---|---|---|
-| `catalogue.manage` | yes | yes | yes |  |  |  |  |
-| `inventory.manage` | yes | yes | yes | yes |  |  |  |
-| `orders.manage` | yes | yes |  | yes |  |  |  |
-| `customers.manage` | yes | yes |  |  | yes |  |  |
-| `support.manage` | yes | yes |  |  | yes |  |  |
-| `refunds.manage` | yes | yes |  |  |  |  |  |
-| `marketing.manage` | yes | yes |  |  |  | yes |  |
-| `reports.view` | yes | yes |  |  |  |  | yes |
-| `reports.export` | yes | yes |  |  |  |  |  |
-| `settings.manage` | yes | yes |  |  |  |  |  |
-| `audit.view` | yes | yes |  |  |  |  |  |
-| `system.view` | yes | yes |  |  |  |  |  |
-| `roles.manage` | yes |  |  |  |  |  |  |
+| Permission | owner | manager | catalogue_editor | fulfillment | support | sales | marketing | analyst |
+|---|---|---|---|---|---|---|---|---|
+| `catalogue.manage` | yes | yes | yes |  |  |  |  |  |
+| `inventory.manage` | yes | yes | yes | yes |  |  |  |  |
+| `orders.manage` | yes | yes |  | yes |  | yes |  |  |
+| `customers.manage` | yes | yes |  |  | yes | yes |  |  |
+| `wholesale.manage` | yes | yes |  |  |  | yes |  |  |
+| `support.manage` | yes | yes |  |  | yes |  |  |  |
+| `refunds.manage` | yes | yes |  |  |  |  |  |  |
+| `marketing.manage` | yes | yes |  |  |  |  | yes |  |
+| `reports.view` | yes | yes |  |  |  | yes |  | yes |
+| `reports.export` | yes | yes |  |  |  |  |  |  |
+| `settings.manage` | yes | yes |  |  |  |  |  |  |
+| `audit.view` | yes | yes |  |  |  |  |  |  |
+| `system.view` | yes | yes |  |  |  |  |  |  |
+| `roles.manage` | yes |  |  |  |  |  |  |  |
 
 ### Other protected actions (permission checked inside the handler)
 

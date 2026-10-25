@@ -27,4 +27,5 @@ dist-ssr
 
 .env.*
 !.env.example
+!.env.docker.example
 .vercel

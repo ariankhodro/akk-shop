@@ -17,6 +17,8 @@ export const PERMISSIONS = Object.freeze([
   "inventory.manage",
   "orders.manage",
   "customers.manage",
+  // Create pre-approved customer accounts, set wholesale terms and passwords.
+  "wholesale.manage",
   "support.manage",
   "refunds.manage",
   "marketing.manage",
@@ -39,6 +41,7 @@ export const ROLE_PRESETS = Object.freeze({
   catalogue_editor: Object.freeze(["catalogue.manage", "inventory.manage"]),
   fulfillment: Object.freeze(["orders.manage", "inventory.manage"]),
   support: Object.freeze(["support.manage", "customers.manage"]),
+  sales: Object.freeze(["customers.manage", "wholesale.manage", "orders.manage", "reports.view"]),
   marketing: Object.freeze(["marketing.manage"]),
   analyst: Object.freeze(["reports.view"]),
 });

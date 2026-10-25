@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, LoaderCircle, Truck } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCartStore } from "../stores/useCartStore";
-import { useUserStore } from "../stores/useUserStore";
+import { isWholesaleUser, useUserStore } from "../stores/useUserStore";
 import axios from "../lib/axios";
 import { formatPrice, STORE_CURRENCY } from "../lib/commerce";
 import { normalizeDigits } from "../lib/normalize-digits";
@@ -207,7 +207,7 @@ const OrderSummary = () => {
         }
       }
       const response = await axios.post("/payments/create-checkout", {
-        couponCode: coupon && isCouponApplied ? coupon.code : null,
+        couponCode: coupon && isCouponApplied && !isWholesaleUser(user) ? coupon.code : null,
         shippingAddress: delivery,
       });
 
@@ -329,12 +329,16 @@ const OrderSummary = () => {
           </label>
           {addressSaveMessage && <p role="status" className={`rounded-lg border p-3 text-xs leading-5 ${addressSaveMessage.includes("ذخیره شد") ? "border-[var(--ui-success-border)] bg-[var(--ui-success-bg)] text-[var(--ui-success)]" : "border-[var(--ui-warning-border)] bg-[var(--ui-warning-bg)] text-[var(--ui-warning)]"}`}>{addressSaveMessage}</p>}
           {formError && <p role="alert" className="rounded-lg border border-[var(--ui-danger-border)] bg-[var(--ui-danger-bg)] p-3 text-sm leading-6 text-[var(--ui-danger)]">{formError}</p>}
-          <GiftCouponCard />
+          {isWholesaleUser(user) ? (
+            <p className="rounded-lg border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-3 text-xs leading-6 text-[var(--ui-muted)]">
+              سفارش شما با قیمت همکاران عمده محاسبه می‌شود؛ کد تخفیف روی قیمت عمده اعمال نمی‌شود. مبلغ نهایی هنگام پرداخت روی سرور دوباره محاسبه و تأیید می‌شود.
+            </p>
+          ) : <GiftCouponCard />}
         </section>
       )}
         <div className="space-y-3">
           <dl className="flex items-center justify-between gap-4">
-            <dt className="text-sm font-normal text-[var(--ui-muted)]">قیمت محصولات</dt>
+            <dt className="text-sm font-normal text-[var(--ui-muted)]">قیمت قطعات</dt>
             <dd dir="ltr" className="text-sm font-medium text-[var(--ui-text)]">{formatPrice(subtotal, paymentConfig.currency)}</dd>
           </dl>
 
@@ -364,7 +368,7 @@ const OrderSummary = () => {
             <dt className="text-base font-bold text-[var(--ui-text)]">مبلغ نهایی قابل پرداخت</dt>
             <dd dir="ltr" className="text-base font-bold text-[var(--ui-accent)]">{shipping.loading ? "در حال محاسبه…" : shipping.error ? "قابل محاسبه نیست" : formatPrice(estimatedTotal, paymentConfig.currency)}</dd>
           </dl>
-          <p className="text-xs leading-5 text-[var(--ui-muted)]">{shipping.error ? "تا زمان دریافت هزینه ارسال، مبلغ نهایی قابل نمایش نیست و پرداخت غیرفعال می‌ماند." : "محاسبه: قیمت محصولات منهای تخفیف، به‌علاوه هزینه ارسال. مبلغ و موجودی پیش از پرداخت در سرور دوباره بررسی می‌شوند."}</p>
+          <p className="text-xs leading-5 text-[var(--ui-muted)]">{shipping.error ? "تا زمان دریافت هزینه ارسال، مبلغ نهایی قابل نمایش نیست و پرداخت غیرفعال می‌ماند." : "محاسبه: قیمت قطعات منهای تخفیف، به‌علاوه هزینه ارسال. مبلغ و موجودی پیش از پرداخت در سرور دوباره بررسی می‌شوند."}</p>
         </div>
 
         {user && !paymentConfig.loading && !paymentConfig.configured && (

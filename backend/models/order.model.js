@@ -5,6 +5,9 @@ const orderProductSchema = new mongoose.Schema(
     product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
+    // Retail price at checkout; differs from `price` on wholesale lines.
+    retailPrice: { type: Number, min: 0, default: null },
+    sku: { type: String, trim: true, maxlength: 64, default: "" },
     size: { type: String, trim: true, default: "" },
     color: { type: String, trim: true, default: "" },
     productName: { type: String, trim: true, maxlength: 160, default: "" },
@@ -64,6 +67,7 @@ const orderSchema = new mongoose.Schema(
     reconciliationNextAttemptAt: { type: Date, default: null },
     status: { type: String, enum: ["pending", "paid", "failed", "cancelled", "expired", "paid_after_expiry"], default: "pending" },
     subtotalAmount: { type: Number, min: 0, default: 0 },
+    pricingTier: { type: String, enum: ["retail", "wholesale"], default: "retail" },
     couponCode: { type: String, trim: true, maxlength: 40, default: "" },
     couponDiscountAmount: { type: Number, min: 0, default: 0 },
     couponDiscountPercentage: { type: Number, min: 0, max: 100, default: 0 },

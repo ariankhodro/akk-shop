@@ -43,6 +43,29 @@ export const protectRoute = async (req, res, next) => {
 	}
 };
 
+// Public routes that price products for the viewer. A valid session attaches
+// req.user; a missing, expired or invalid token simply means "anonymous". It
+// never rejects the request and never reveals why a token was not accepted.
+export const optionalAuth = async (req, _res, next) => {
+	const accessToken = req.cookies?.accessToken;
+	if (typeof accessToken !== "string" || !accessToken) return next();
+	try {
+		const decoded = verifyAccessToken(accessToken);
+		const user = await User.findById(decoded.userId).select("_id role accountType wholesaleProfile isActive tokenVersion").lean();
+		if (user && user.isActive !== false && tokenVersionOf(user) === decoded.tv) req.user = user;
+	} catch {
+		// Anonymous pricing is always safe to fall back to.
+	}
+	return next();
+};
+
+// Responses that depend on who is asking must never be stored by shared caches.
+export const privateWhenPersonalised = (req, res, next) => {
+	if (req.cookies?.accessToken) res.set("Cache-Control", "private, no-store");
+	res.vary("Cookie");
+	return next();
+};
+
 // Route -> permission table. Every route mounted behind `adminRoute` must have
 // exactly one rule; unmapped routes are denied for everyone, owners included.
 // A rule's `permission` is a single permission or an array meaning "any of".
@@ -85,6 +108,9 @@ export const ADMIN_PERMISSION_RULES = [
         : "customers.manage",
   },
   { base: "/api/admin", method: "PATCH", path: "/customers/:id/access", permission: "roles.manage" },
+  { base: "/api/admin", method: "POST", path: "/customers", permission: "wholesale.manage" },
+  { base: "/api/admin", method: "PATCH", path: "/customers/:id/wholesale", permission: "wholesale.manage" },
+  { base: "/api/admin", method: "POST", path: "/customers/:id/password", permission: "wholesale.manage" },
   { base: "/api/admin", method: "GET", path: "/service-cases", permission: "support.manage" },
   { base: "/api/admin", method: "PATCH", path: "/service-cases/:id", permission: ["support.manage", "refunds.manage"] },
   { base: "/api/admin", method: "GET", path: "/inventory", permission: "inventory.manage" },

@@ -1,4 +1,5 @@
 import Product from "../models/product.model.js";
+import { WHOLESALE_FIELDS, isWholesaleViewer, maxLineQuantityFor, presentProductForViewer, unitPriceFor } from "../lib/pricing.js";
 
 const getCartProductId = (item) => item.product?.toString() || item._id?.toString();
 const normalizedOption = (value) => typeof value === "string" ? value.trim() : "";
@@ -14,7 +15,9 @@ export const getCartProducts = async (req, res) => {
   try {
     const cartItems = req.user.cartItems || [];
     const productIds = cartItems.map(getCartProductId).filter(Boolean);
-    const products = await Product.find({ _id: { $in: productIds }, isActive: { $ne: false } }).lean();
+    const wholesale = isWholesaleViewer(req.user);
+    const query = Product.find({ _id: { $in: productIds }, isActive: { $ne: false } }).select("-searchTextNormalized -__v");
+    const products = await (wholesale ? query.select(WHOLESALE_FIELDS) : query).lean();
     const productsById = new Map(products.map((product) => [product._id.toString(), product]));
     return res.json(cartItems.map((item) => {
       const id = getCartProductId(item);
@@ -24,7 +27,10 @@ export const getCartProducts = async (req, res) => {
       const color = normalizedOption(item.color);
       const selectedVariant = (product.variants || []).length ? variantFor(product, size, color) : null;
       return {
-        ...product,
+        ...presentProductForViewer(product, req.user),
+        // What this line costs right now at its quantity (checkout re-prices on the server).
+        unitPrice: unitPriceFor(product, req.user, item.quantity),
+        maxQuantity: maxLineQuantityFor(req.user),
         quantity: item.quantity,
         selectedSize: size,
         selectedColor: color,
@@ -54,12 +60,13 @@ export const mergeGuestCart = async (req, res) => {
     const productsById = new Map(products.map((product) => [product._id.toString(), product]));
     const skippedKeys = [];
     const accepted = [];
+    const lineLimit = maxLineQuantityFor(req.user);
     const pendingQuantity = new Map();
 
     for (const item of normalizedItems) {
       const product = productsById.get(item.productId);
       const key = cartItemKey(item.productId, item.size, item.color);
-      if (!product || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 100) {
+      if (!product || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > lineLimit) {
         skippedKeys.push(key);
         continue;
       }
@@ -75,7 +82,7 @@ export const mergeGuestCart = async (req, res) => {
       );
       const alreadyInCart = Number(existingItem?.quantity || 0) + Number(pendingQuantity.get(key) || 0);
       const stock = selectedVariant ? selectedVariant.stock : product.stock;
-      if (alreadyInCart + item.quantity > 100 ||
+      if (alreadyInCart + item.quantity > lineLimit ||
           (typeof stock === "number" && alreadyInCart + item.quantity > stock)) {
         skippedKeys.push(key);
         continue;
@@ -129,17 +136,22 @@ export const addToCart = async (req, res) => {
     const existingItem = user.cartItems.find((item) =>
       getCartProductId(item) === productId && sameVariant(item, size, color)
     );
-    const nextQuantity = (existingItem?.quantity || 0) + 1;
+    const lineLimit = maxLineQuantityFor(user);
+    const requested = req.body.quantity === undefined ? 1 : Number(req.body.quantity);
+    if (!Number.isInteger(requested) || requested < 1 || requested > lineLimit) {
+      return res.status(400).json({ message: "تعداد درخواستی معتبر نیست" });
+    }
+    const nextQuantity = (existingItem?.quantity || 0) + requested;
     const trackedStock = selectedVariant ? selectedVariant.stock : product.stock;
-    if (nextQuantity > 100) {
-      return res.status(409).json({ message: "تعداد هر گزینه نمی‌تواند بیشتر از ۱۰۰ عدد باشد" });
+    if (nextQuantity > lineLimit) {
+      return res.status(409).json({ message: "تعداد هر کالا در سبد نمی‌تواند بیشتر از " + lineLimit.toLocaleString("fa-IR") + " عدد باشد" });
     }
     if (typeof trackedStock === "number" && nextQuantity > trackedStock) {
       return res.status(409).json({ message: trackedStock === 0 ? "این گزینه موجود نیست" : "تعداد درخواستی بیشتر از موجودی این گزینه است" });
     }
 
     if (existingItem) existingItem.quantity = nextQuantity;
-    else user.cartItems.push({ product: productId, quantity: 1, size, color });
+    else user.cartItems.push({ product: productId, quantity: requested, size, color });
     await user.save();
     return res.json({ success: true, cartItems: user.cartItems });
   } catch (error) {
@@ -179,8 +191,9 @@ export const updateQuantity = async (req, res) => {
     const quantity = Number(req.body.quantity);
     const size = normalizedOption(req.body.size);
     const color = normalizedOption(req.body.color);
-    if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100) {
-      return res.status(400).json({ message: "Quantity must be an integer between 0 and 100" });
+    const lineLimit = maxLineQuantityFor(req.user);
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > lineLimit) {
+      return res.status(400).json({ message: "Quantity must be an integer between 0 and " + lineLimit });
     }
 
     const user = req.user;

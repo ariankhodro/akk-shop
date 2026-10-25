@@ -74,7 +74,7 @@ const OperationsDashboard = () => {
         </>
       )}
       <div className="flex items-center gap-2 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-raised)] p-4 text-xs leading-6 text-[var(--ui-muted)]">
-        <Server size={18} className="shrink-0 text-[#9aa58e]" aria-hidden="true" />
+        <Server size={18} className="shrink-0 text-[#fb923c]" aria-hidden="true" />
         برای پایش کامل تولید، نمودار تأخیر و خطا، هشدار خودکار، فضای دیسک، مصرف CPU/RAM و وضعیت دامنه/SSL را نیز از طریق میزبان یا سرویس مانیتورینگ جداگانه تنظیم کنید.
       </div>
     </section>

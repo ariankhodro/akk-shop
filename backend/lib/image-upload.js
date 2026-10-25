@@ -1,4 +1,7 @@
 import cloudinary from "./cloudinary.js";
+import { randomBytes } from "node:crypto";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 const MIME_FORMATS = {
   "image/jpeg": "jpg",
@@ -23,6 +26,47 @@ export class ImageStorageError extends Error {
     this.name = "ImageStorageError";
   }
 }
+
+// Media storage driver. "cloudinary" (default) uploads to Cloudinary; "local"
+// writes validated images to UPLOADS_DIR, served read-only at /uploads (used
+// by the self-hosted Docker deployment, persisted in a volume).
+export const mediaStorageMode = () => (process.env.MEDIA_STORAGE === "local" ? "local" : "cloudinary");
+export const uploadsDirectory = () => path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "data", "uploads"));
+const LOCAL_FOLDER_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+const LOCAL_PATH_PATTERN = /^\/uploads\/([a-z][a-z0-9-]{0,31})\/([a-f0-9]{32})\.(jpg|png|webp|gif)$/;
+
+// Returns "<folder>/<file>" for an image this server stored locally in `folder`.
+export const getManagedLocalImagePath = (value, { folder } = {}) => {
+  if (typeof value !== "string" || !folder) return null;
+  const match = LOCAL_PATH_PATTERN.exec(value);
+  if (!match || match[1] !== folder) return null;
+  return match[1] + "/" + match[2] + "." + match[3];
+};
+
+export const createLocalUploader = (root = uploadsDirectory()) => ({
+  async upload(dataUrl, { folder } = {}) {
+    if (!LOCAL_FOLDER_PATTERN.test(folder || "")) throw new Error("Invalid media folder");
+    // Callers validate first; validate again so this driver is safe on its own.
+    const image = validateImageDataUrl(dataUrl, 10 * 1024 * 1024);
+    const name = randomBytes(16).toString("hex") + "." + image.format;
+    const directory = path.join(root, folder);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, name), image.buffer, { flag: "wx", mode: 0o644 });
+    return { secure_url: "/uploads/" + folder + "/" + name };
+  },
+  async destroy(relativePath) {
+    if (!/^[a-z][a-z0-9-]{0,31}\/[a-f0-9]{32}\.(jpg|png|webp|gif)$/.test(relativePath || "")) return { result: "not found" };
+    try {
+      await unlink(path.join(root, relativePath));
+      return { result: "ok" };
+    } catch (error) {
+      if (error?.code === "ENOENT") return { result: "not found" };
+      throw error;
+    }
+  },
+});
+
+const defaultUploader = () => (mediaStorageMode() === "local" ? createLocalUploader() : cloudinary.uploader);
 
 const safeImageReference = (value) => {
   if (typeof value !== "string" || value.length > 2048) return false;
@@ -157,8 +201,13 @@ export const getManagedCloudinaryPublicId = (
 
 export const deleteManagedCloudinaryImage = async (
   value,
-  { folder, cloudName = process.env.CLOUDINARY_CLOUD_NAME, uploader = cloudinary.uploader } = {}
+  { folder, cloudName = process.env.CLOUDINARY_CLOUD_NAME, uploader = defaultUploader() } = {}
 ) => {
+  const localPath = getManagedLocalImagePath(value, { folder });
+  if (localPath) {
+    const result = await createLocalUploader().destroy(localPath);
+    return result?.result === "ok" || result?.result === "not found";
+  }
   const publicId = getManagedCloudinaryPublicId(value, { cloudName, folder });
   if (!publicId) return false;
   const result = await uploader.destroy(publicId, { resource_type: "image", invalidate: true });
@@ -167,7 +216,7 @@ export const deleteManagedCloudinaryImage = async (
 
 export const resolveImageReference = async (
   value,
-  { folder, maxBytes = 2 * 1024 * 1024, uploader = cloudinary.uploader } = {}
+  { folder, maxBytes = 2 * 1024 * 1024, uploader = defaultUploader() } = {}
 ) => {
   if (value === undefined || value === null || value === "") return "";
   if (typeof value !== "string") throw new ImageUploadError();
@@ -215,7 +264,7 @@ export const resolveManagedImageList = async (
     maxCount = 8,
     existing = [],
     cloudName = process.env.CLOUDINARY_CLOUD_NAME,
-    uploader = cloudinary.uploader,
+    uploader = defaultUploader(),
   } = {}
 ) => {
   if (values === undefined || values === null) return { urls: [], uploaded: [] };
@@ -240,9 +289,9 @@ export const resolveManagedImageList = async (
         resolved = entry;
       } else {
         const extension = /\.([a-z0-9]+)$/i.exec(entry.split(/[?#]/)[0])?.[1]?.toLowerCase();
-        const managed = /^https:\/\//i.test(entry) && safeImageReference(entry) &&
+        const managed = (mediaStorageMode() === "local" && getManagedLocalImagePath(entry, { folder }) !== null) || (/^https:\/\//i.test(entry) && safeImageReference(entry) &&
           (!extension || MANAGED_EXTENSIONS.has(extension)) &&
-          getManagedCloudinaryPublicId(entry, { cloudName, folder }) !== null;
+          getManagedCloudinaryPublicId(entry, { cloudName, folder }) !== null);
         if (!managed) {
           throw new ImageUploadError("آدرس تصویر باید تصویر بارگذاری‌شده همین فروشگاه یا فایل JPG، PNG، WebP یا GIF باشد.");
         }

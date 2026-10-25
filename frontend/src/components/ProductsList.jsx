@@ -7,7 +7,8 @@ import ProductEditForm from "./ProductEditForm";
 
 const PAGE_SIZE = 12;
 const numberFa = (value) => new Intl.NumberFormat("fa-IR").format(Number(value) || 0);
-const labels = { jeans: "شلوار جین", "t-shirts": "تی‌شرت", shoes: "کفش", glasses: "عینک", jackets: "کت و کاپشن", suits: "کت‌وشلوار", bags: "کیف" };
+const labels = { engine: "قطعات موتوری", brakes: "سیستم ترمز", suspension: "جلوبندی و تعلیق", filters: "فیلترها", electrical: "برق و الکترونیک", body: "بدنه و تزئینات", transmission: "گیربکس و کلاچ", cooling: "سیستم خنک‌کاری" };
+const qualityLabels = { genuine: "اصلی", oem: "OEM", aftermarket: "یدکی تجاری", used: "استوک" };
 const stockLabel = (product) => {
   if ((product.variants || []).length) {
     const total = product.variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
@@ -85,13 +86,13 @@ const ProductsList = () => {
 
   const toggleArchive = async (product) => {
     const next = product.isActive === false;
-    if (!next && !window.confirm("محصول «" + product.name + "» از فروشگاه عمومی بایگانی می‌شود و دیگر برای خرید نمایش داده نخواهد شد. ادامه می‌دهید؟")) return;
+    if (!next && !window.confirm("قطعه «" + product.name + "» از فروشگاه عمومی بایگانی می‌شود و دیگر برای خرید نمایش داده نخواهد شد. ادامه می‌دهید؟")) return;
     const saved = await setProductActive(product._id, next);
     if (saved) reload();
   };
 
   const permanentlyDelete = async (product) => {
-    const approved = window.confirm("حذف دائمی محصول «" + product.name + "» برگشت‌پذیر نیست. سوابق سفارش موجود ممکن است همچنان نام و قیمت ثبت‌شده را نگه دارند. مطمئن هستید؟");
+    const approved = window.confirm("حذف دائمی قطعه «" + product.name + "» برگشت‌پذیر نیست. سوابق سفارش موجود ممکن است همچنان نام و قیمت ثبت‌شده را نگه دارند. مطمئن هستید؟");
     if (!approved) return;
     const deleted = await deleteProduct(product._id);
     if (deleted) reload();
@@ -105,8 +106,8 @@ const ProductsList = () => {
     <section dir="rtl" className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-[var(--ui-text)]">محصولات و موجودی</h2>
-          <p className="mt-1 text-sm leading-6 text-[var(--ui-muted)]">محصولات را ویرایش، پیش‌نمایش، بایگانی یا بازیابی کنید. حذف دائمی فقط برای محصولات بایگانی‌شده نمایش داده می‌شود.</p>
+          <h2 className="text-2xl font-bold text-[var(--ui-text)]">قطعات، قیمت‌ها و موجودی</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--ui-muted)]">قطعات را با نام، کد کالا یا شماره فنی جست‌وجو کنید؛ قیمت خرده و عمده را ببینید و موجودی را به‌روز کنید. حذف دائمی فقط برای قطعات بایگانی‌شده نمایش داده می‌شود.</p>
         </div>
         <button type="button" onClick={reload} disabled={loading} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--ui-border)] px-4 py-2 text-sm text-[var(--ui-text)] hover:bg-[var(--ui-hover)] disabled:opacity-50">
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} aria-hidden="true" /> تازه‌سازی
@@ -115,7 +116,7 @@ const ProductsList = () => {
 
       <div className="grid gap-3 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block text-xs font-semibold text-[var(--ui-muted)]">جست‌وجو
-          <input type="search" value={search} onChange={(event) => changeFilter(setSearch, event.target.value)} placeholder="نام، توضیحات یا نام دسته…" className="mt-1 min-h-11 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 text-sm text-[var(--ui-text)] outline-none focus:border-[var(--ui-focus)]" />
+          <input type="search" value={search} onChange={(event) => changeFilter(setSearch, event.target.value)} placeholder="نام قطعه، کد کالا یا شماره فنی…" className="mt-1 min-h-11 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 text-sm text-[var(--ui-text)] outline-none focus:border-[var(--ui-focus)]" />
         </label>
         <label className="block text-xs font-semibold text-[var(--ui-muted)]">دسته‌بندی
           <select value={categoryFilter} onChange={(event) => changeFilter(setCategoryFilter, event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 text-sm text-[var(--ui-text)] outline-none focus:border-[var(--ui-focus)]">
@@ -135,18 +136,18 @@ const ProductsList = () => {
           <select value={statusFilter} onChange={(event) => changeFilter(setStatusFilter, event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[var(--ui-border)] bg-[var(--ui-input-bg)] px-3 text-sm text-[var(--ui-text)] outline-none focus:border-[var(--ui-focus)]">
             <option value="active">منتشرشده</option>
             <option value="archived">بایگانی‌شده</option>
-            <option value="all">همه محصولات</option>
+            <option value="all">همه قطعات</option>
           </select>
         </label>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--ui-border)] px-4 py-3 sm:px-5">
-          <h3 className="font-semibold text-[var(--ui-text)]">فهرست محصولات</h3>
-          <span className="text-xs text-[var(--ui-muted)]">{numberFa(pagination.total)} محصول</span>
+          <h3 className="font-semibold text-[var(--ui-text)]">فهرست قطعات</h3>
+          <span className="text-xs text-[var(--ui-muted)]">{numberFa(pagination.total)} قطعه</span>
         </div>
         {loading && products.length === 0 ? (
-          <div role="status" className="flex min-h-48 items-center justify-center gap-3 text-sm text-[var(--ui-muted)]"><LoaderCircle size={20} className="animate-spin" aria-hidden="true" />در حال دریافت محصولات…</div>
+          <div role="status" className="flex min-h-48 items-center justify-center gap-3 text-sm text-[var(--ui-muted)]"><LoaderCircle size={20} className="animate-spin" aria-hidden="true" />در حال دریافت قطعات…</div>
         ) : error && products.length === 0 ? (
           <div className="space-y-3 p-8 text-center">
             <p role="alert" className="text-sm leading-6 text-[var(--ui-danger)]">{error}</p>
@@ -154,17 +155,17 @@ const ProductsList = () => {
           </div>
         ) : products.length === 0 ? (
           <div className="space-y-3 p-8 text-center">
-            <p className="text-sm text-[var(--ui-muted)]">{debouncedSearch || categoryFilter || stockFilter ? "محصولی با این فیلترها پیدا نشد." : "هنوز محصولی ثبت نشده است."}</p>
+            <p className="text-sm text-[var(--ui-muted)]">{debouncedSearch || categoryFilter || stockFilter ? "قطعه‌ای با این فیلترها پیدا نشد." : "هنوز قطعه‌ای ثبت نشده است."}</p>
             {(debouncedSearch || categoryFilter || stockFilter || statusFilter !== "active") && <button type="button" onClick={() => { setSearch(""); setDebouncedSearch(""); setCategoryFilter(""); setStockFilter(""); setStatusFilter("active"); setPage(1); }} className="text-sm font-semibold text-[var(--ui-accent)] underline underline-offset-4">پاک‌کردن فیلترها</button>}
           </div>
         ) : (
           <>
             {error && <p role="alert" className="border-b border-red-900/50 bg-red-950/20 px-4 py-2 text-xs text-[var(--ui-danger)]">{error}</p>}
             <div className="overflow-x-auto">
-              <table className="min-w-[1040px] w-full divide-y divide-[var(--ui-border)]">
+              <table className="min-w-[1180px] w-full divide-y divide-[var(--ui-border)]">
                 <thead className="bg-[var(--ui-input-bg)]">
                   <tr>
-                    {["محصول", "قیمت", "دسته‌بندی", "موجودی", "انتشار", "عملیات"].map((label) => <th key={label} scope="col" className="px-4 py-3 text-right text-xs font-semibold text-[var(--ui-muted)]">{label}</th>)}
+                    {["قطعه", "کد کالا / برند", "قیمت خرده / عمده", "دسته‌بندی", "موجودی", "انتشار", "عملیات"].map((label) => <th key={label} scope="col" className="px-4 py-3 text-right text-xs font-semibold text-[var(--ui-muted)]">{label}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--ui-border)]">
@@ -172,7 +173,7 @@ const ProductsList = () => {
                     <tr key={product._id} className="align-top transition hover:bg-[var(--ui-hover)]">
                       <td className="px-4 py-4">
                         <div className="flex max-w-sm items-start gap-3">
-                          {product.image ? <img src={product.image} alt="" loading="lazy" className="h-14 w-12 shrink-0 rounded-lg bg-[var(--ui-surface-raised)] object-cover" /> : <span className="h-14 w-12 shrink-0 rounded-lg bg-[var(--ui-surface-raised)]" />}
+                          {product.image ? <img src={product.image} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-lg bg-[var(--ui-surface-raised)] object-contain" /> : <span className="h-14 w-14 shrink-0 rounded-lg bg-[var(--ui-surface-raised)]" />}
                           <div className="min-w-0">
                             <p className="font-semibold text-[var(--ui-text)]">{product.name}</p>
                             <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--ui-muted)]">{product.description || "بدون توضیحات"}</p>
@@ -180,11 +181,22 @@ const ProductsList = () => {
                               <a href={"/product/" + product._id} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--ui-accent)] hover:underline">
                                 پیش‌نمایش عمومی <ExternalLink size={12} aria-hidden="true" />
                               </a>
-                            ) : <p className="mt-2 text-xs text-[var(--ui-muted)]">برای پیش‌نمایش عمومی، ابتدا محصول را بازیابی کنید.</p>}
+                            ) : <p className="mt-2 text-xs text-[var(--ui-muted)]">برای پیش‌نمایش عمومی، ابتدا قطعه را بازیابی کنید.</p>}
                           </div>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-sm text-[var(--ui-text)]"><span dir="ltr">{formatPrice(product.price)}</span></td>
+                      <td className="max-w-48 px-4 py-4 text-xs text-[var(--ui-muted)]">
+                        {product.sku ? <p dir="ltr" className="text-left font-mono text-sm font-semibold text-[var(--ui-text)]">{product.sku}</p> : <p>بدون کد کالا</p>}
+                        {(product.oemNumbers || []).length > 0 && <p dir="ltr" className="mt-1 line-clamp-2 text-left">{product.oemNumbers.join(", ")}</p>}
+                        <p className="mt-1">{[product.brand, qualityLabels[product.quality]].filter(Boolean).join(" · ") || "—"}</p>
+                        {(product.fitments || []).length > 0 && <p className="mt-1">سازگار با {numberFa(product.fitments.length)} خودرو</p>}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 text-sm text-[var(--ui-text)]">
+                        <span dir="ltr">{formatPrice(product.price)}</span>
+                        {product.wholesalePrice !== null && product.wholesalePrice !== undefined
+                          ? <p className="mt-1 text-xs text-[var(--ui-accent)]">عمده: <span dir="ltr">{formatPrice(product.wholesalePrice)}</span> · از {numberFa(product.wholesaleMinQuantity || 1)} عدد</p>
+                          : <p className="mt-1 text-xs text-[var(--ui-muted)]">بدون قیمت عمده</p>}
+                      </td>
                       <td className="max-w-48 px-4 py-4 text-sm text-[var(--ui-muted)]">{categoryName(product)}</td>
                       <td className="min-w-56 px-4 py-4">
                         {(product.variants || []).length > 0 ? (
@@ -193,7 +205,7 @@ const ProductsList = () => {
                             <div className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-[var(--ui-border)] p-2">
                               {product.variants.map((variant) => {
                                 const key = product._id + "::" + (variant.size || "") + "::" + (variant.color || "");
-                                const option = [variant.size && "سایز " + variant.size, variant.color].filter(Boolean).join(" / ") || "پیش‌فرض";
+                                const option = [variant.size, variant.color].filter(Boolean).join(" / ") || "پیش‌فرض";
                                 return <div key={key} className="flex items-center justify-between gap-2">
                                   <span className="max-w-28 text-xs text-[var(--ui-muted)]">{option}</span>
                                   <div className="flex shrink-0 items-center gap-1">
@@ -216,8 +228,8 @@ const ProductsList = () => {
                       </td>
                       <td className="whitespace-nowrap px-4 py-4">
                         <span className={"inline-flex rounded-full px-2.5 py-1 text-xs font-semibold " + (product.isActive === false ? "bg-[var(--ui-surface-raised)] text-[var(--ui-muted)]" : "bg-emerald-900/40 text-[var(--ui-success)]")}>{product.isActive === false ? "بایگانی" : "منتشر"}</span>
-                        <button type="button" disabled={product.isActive === false} onClick={() => toggleFeaturedProduct(product._id)} aria-label={product.isFeatured ? "حذف از محصولات منتخب" : "افزودن به محصولات منتخب"} className={"mt-2 inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--ui-border)] px-3 text-xs text-[var(--ui-text)] hover:bg-[var(--ui-hover)] disabled:opacity-40"}>
-                          <Star size={14} fill={product.isFeatured ? "currentColor" : "none"} aria-hidden="true" />{product.isFeatured ? "محصول منتخب" : "ویژه‌کردن"}
+                        <button type="button" disabled={product.isActive === false} onClick={() => toggleFeaturedProduct(product._id)} aria-label={product.isFeatured ? "حذف از قطعات منتخب" : "افزودن به قطعات منتخب"} className={"mt-2 inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--ui-border)] px-3 text-xs text-[var(--ui-text)] hover:bg-[var(--ui-hover)] disabled:opacity-40"}>
+                          <Star size={14} fill={product.isFeatured ? "currentColor" : "none"} aria-hidden="true" />{product.isFeatured ? "قطعه منتخب" : "ویژه‌کردن"}
                         </button>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4">

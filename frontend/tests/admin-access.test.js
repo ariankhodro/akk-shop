@@ -16,6 +16,8 @@ test("tabs follow the server permission table", () => {
   assert.equal(canOpenTab(["reports.view"], "dashboard"), true, "analysts see the overview");
   assert.equal(canOpenTab(["marketing.manage"], "create"), false);
   assert.equal(canOpenTab(["refunds.manage"], "service-cases"), true);
+  assert.equal(canOpenTab(["wholesale.manage"], "customers"), true, "wholesale managers reach the customer accounts tab");
+  assert.equal(canOpenTab(["wholesale.manage"], "products"), false);
   assert.equal(hasAnyPermission(["a"], ["b", "a"]), true);
 });
 

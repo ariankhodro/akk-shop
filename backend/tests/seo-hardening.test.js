@@ -198,7 +198,7 @@ test("campaign previews never render a host-escaping href", async () => {
     const res = makeRes();
     await sharePreviewHandler(makeReq({ type: "campaign", id: "sale" }, "shop.example"), res);
     assert.equal(res.statusCode, 200);
-    assert.ok(res.body.includes('<a href="' + expected + '" style="color:#526149">مشاهده پیشنهاد</a>'), href);
+    assert.ok(res.body.includes('<a href="' + expected + '" style="color:#c2410c">مشاهده پیشنهاد</a>'), href);
     assert.ok(!res.body.includes("evil.example"), href);
   }
 });

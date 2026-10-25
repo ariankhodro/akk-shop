@@ -27,10 +27,10 @@ const FeaturedProducts = ({ featuredProducts = [] }) => {
   return (
     <section dir="rtl" className="py-8 sm:py-10" aria-labelledby="featured-products-heading">
       <div className="mb-7 flex flex-col gap-3 sm:mb-9 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#68745f]">منتخب برای شما</p><h2 id="featured-products-heading" className="font-serif text-3xl font-medium tracking-tight text-[#252722] sm:text-4xl">محصولات منتخب</h2></div>
+        <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#ea580c]">منتخب برای شما</p><h2 id="featured-products-heading" className="font-serif text-3xl font-medium tracking-tight text-[#1c1f24] sm:text-4xl">قطعات منتخب</h2></div>
         <div className="flex flex-wrap items-center gap-3">
-          <p className="max-w-sm text-sm leading-6 text-[#62645c] sm:text-right">مجموعه‌ای گزیده از محصولاتی که ارزش دیدن دارند.</p>
-          <Link to="/featured-products" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#d5d0c5] px-4 py-2 text-xs font-semibold text-[#41443b] transition hover:border-[#252722]">
+          <p className="max-w-sm text-sm leading-6 text-[#5a606a] sm:text-right">قطعات پرفروش و پرکاربرد برای خودروهای چینی، با ضمانت اصالت کالا.</p>
+          <Link to="/featured-products" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#d2d6dc] px-4 py-2 text-xs font-semibold text-[#33373e] transition hover:border-[#1c1f24]">
             مشاهده همه<ArrowLeft size={14} aria-hidden="true" />
           </Link>
         </div>
@@ -42,10 +42,10 @@ const FeaturedProducts = ({ featuredProducts = [] }) => {
           </div>
         </div>
         {featuredProducts.length > itemsPerPage && <div className="mt-5 flex items-center justify-between gap-4">
-          <p className="text-xs tabular-nums text-[#77786f]" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(Math.min(currentIndex + itemsPerPage, featuredProducts.length))} از {new Intl.NumberFormat("fa-IR").format(featuredProducts.length)} محصول</p>
+          <p className="text-xs tabular-nums text-[#6b717b]" aria-live="polite">{new Intl.NumberFormat("fa-IR").format(Math.min(currentIndex + itemsPerPage, featuredProducts.length))} از {new Intl.NumberFormat("fa-IR").format(featuredProducts.length)} قطعه</p>
           <div className="flex gap-2">
-            <button type="button" aria-controls="featured-products-track" onClick={prevSlide} disabled={currentIndex === 0} aria-label="محصولات قبلی" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d5d0c5] text-[#252722] transition hover:border-[#252722] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f] disabled:cursor-not-allowed disabled:opacity-35"><ChevronRight size={19} aria-hidden="true" /></button>
-            <button type="button" aria-controls="featured-products-track" onClick={nextSlide} disabled={currentIndex >= maxIndex} aria-label="محصولات بعدی" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d5d0c5] text-[#252722] transition hover:border-[#252722] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68745f] disabled:cursor-not-allowed disabled:opacity-35"><ChevronLeft size={19} aria-hidden="true" /></button>
+            <button type="button" aria-controls="featured-products-track" onClick={prevSlide} disabled={currentIndex === 0} aria-label="قطعات قبلی" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d2d6dc] text-[#1c1f24] transition hover:border-[#1c1f24] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] disabled:cursor-not-allowed disabled:opacity-35"><ChevronRight size={19} aria-hidden="true" /></button>
+            <button type="button" aria-controls="featured-products-track" onClick={nextSlide} disabled={currentIndex >= maxIndex} aria-label="قطعات بعدی" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d2d6dc] text-[#1c1f24] transition hover:border-[#1c1f24] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ea580c] disabled:cursor-not-allowed disabled:opacity-35"><ChevronLeft size={19} aria-hidden="true" /></button>
           </div>
         </div>}
       </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, ChevronLeft, Home, MapPin, Pencil, Plus, Save, Trash2, UserRound, X } from "lucide-react";
+import { Building2, Check, ChevronLeft, ClipboardList, Home, KeyRound, MapPin, Pencil, Plus, Save, Trash2, UserRound, X } from "lucide-react";
 import toast from "react-hot-toast";
 import axios from "../lib/axios";
 import { normalizeDigits } from "../lib/normalize-digits";
@@ -255,7 +255,7 @@ const ProfilePage = () => {
       <div className="mx-auto max-w-5xl">
         <header className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold tracking-[0.15em] text-[var(--ui-accent)]">حساب کاربری تیک بوتیک</p>
+            <p className="text-xs font-semibold tracking-[0.15em] text-[var(--ui-accent)]">حساب کاربری میبا</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">پروفایل من</h1>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-[var(--ui-muted)]">اطلاعات شخصی و نشانی‌های تحویل را یک‌بار ذخیره کنید تا در خریدهای بعدی، فرم پرداخت به‌صورت خودکار تکمیل شود.</p>
           </div>
@@ -281,6 +281,19 @@ const ProfilePage = () => {
                 <label className="block text-sm text-[var(--ui-muted)]">ایمیل حساب<input type="email" value={profile.email || user?.email || ""} readOnly className={fieldClass + " cursor-not-allowed opacity-75"} dir="ltr" /><span className="mt-1 block text-xs leading-5 text-[var(--ui-muted)]">ایمیل ورود در این بخش قابل تغییر نیست.</span></label>
                 <button type="submit" disabled={profileSaving || name.trim() === profile.name} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--ui-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--ui-button-text)] transition hover:bg-[var(--ui-accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"><Save size={16} aria-hidden="true" /> {profileSaving ? "در حال ذخیره…" : "ذخیره اطلاعات"}</button>
               </form>
+              <Link to="/account/change-password" className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--ui-border-strong)] px-4 py-2.5 text-sm font-semibold text-[var(--ui-text-strong)] transition hover:bg-[var(--ui-surface-raised)]"><KeyRound size={16} aria-hidden="true" />تغییر رمز عبور</Link>
+              {profile.accountType === "wholesale" && (
+                <div className="mt-5 rounded-2xl border border-[var(--ui-accent)]/30 bg-[var(--ui-accent-soft)] p-4">
+                  <p className="flex items-center gap-2 text-sm font-bold text-[var(--ui-text)]"><Building2 size={17} className="text-[var(--ui-accent)]" aria-hidden="true" />حساب همکاری عمده</p>
+                  <dl className="mt-3 space-y-1.5 text-xs text-[var(--ui-text-strong)]">
+                    {profile.wholesaleProfile?.companyName && <div className="flex justify-between gap-3"><dt className="text-[var(--ui-muted)]">فروشگاه / شرکت</dt><dd className="font-semibold">{profile.wholesaleProfile.companyName}</dd></div>}
+                    {profile.wholesaleProfile?.city && <div className="flex justify-between gap-3"><dt className="text-[var(--ui-muted)]">شهر</dt><dd>{profile.wholesaleProfile.city}</dd></div>}
+                    {Number(profile.wholesaleProfile?.discountPercent) > 0 && <div className="flex justify-between gap-3"><dt className="text-[var(--ui-muted)]">تخفیف اختصاصی</dt><dd className="font-semibold">{new Intl.NumberFormat("fa-IR").format(profile.wholesaleProfile.discountPercent)}٪</dd></div>}
+                  </dl>
+                  <p className="mt-3 text-xs leading-6 text-[var(--ui-muted)]">برای تغییر اطلاعات همکاری با کارشناس فروش میبا تماس بگیرید.</p>
+                  <Link to="/wholesale/quick-order" className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--ui-accent)] px-4 text-xs font-bold text-white hover:bg-[var(--ui-accent-hover)]"><ClipboardList size={15} aria-hidden="true" />سفارش سریع با کد فنی</Link>
+                </div>
+              )}
             </section>
 
             <section id="saved-addresses" className="min-w-0 scroll-mt-28 rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-surface)] p-5 shadow-sm sm:p-6">
