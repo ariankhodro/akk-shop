@@ -2,15 +2,16 @@
 // High-performance synchronization between Tadarok API (tadarok.akk.ir)
 // and the MIBA shop MongoDB database.
 //
-// Defaults to syncing all in-stock products (Count1 > 0, ~11,830 items).
-// Supports flags:
-//   --dry-run      Run without writing to database
-//   --limit=N      Stop after processing N products
-//   --store-no=N   Filter by a specific internal store (e.g. 1 for Zeinhari only)
-//   --clean-demo   Remove seeded demo parts
+// Features:
+//   - Fast Incremental Sync (using updated_since) for sub-second updates
+//   - Full Sync mode (--full)
+//   - Automatic Redis cache invalidation when prices/stocks change
+//   - Dry run mode (--dry-run)
+//   - Duplicate SKU disambiguation
 
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,13 +22,16 @@ const TADAROK_BASE_URL = (process.env.TADAROK_BASE_URL || "https://tadarok.akk.i
 const TADAROK_API_KEY = process.env.TADAROK_API_KEY || "tdk_hyxN48NU_38tdmPMJNUlokVVtdjvGL4Zy0jLVuzqJaosFct1y6N8";
 
 const isDryRun = process.argv.includes("--dry-run");
-const shouldCleanDemo = process.argv.includes("--clean-demo") || true;
+const isForceFull = process.argv.includes("--full");
+const shouldCleanDemo = process.argv.includes("--clean-demo");
 
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const maxProducts = limitArg ? parseInt(limitArg.split("=")[1], 10) : Infinity;
 
 const storeArg = process.argv.find((a) => a.startsWith("--store-no="));
 const specificStoreNo = storeArg ? parseInt(storeArg.split("=")[1], 10) : null;
+
+const SYNC_STATE_FILE = path.resolve(__dirname, "../.last_sync_tadarok");
 
 const DEMO_SKUS = [
   "T11-3501080", "A11-1109111", "481H-1012010", "S11-1307010", "2905100-J5",
@@ -158,15 +162,51 @@ function detectBrand(name) {
   return "MIBA";
 }
 
+async function invalidateRedisCache() {
+  try {
+    const { redis } = await import("../backend/lib/redis.js");
+    if (redis && typeof redis.del === "function") {
+      await Promise.allSettled([
+        redis.del("featured_products_v2"),
+        redis.del("bestsellers_v2"),
+        redis.del("newest_products_v2"),
+      ]);
+      console.log("Redis cache keys invalidated.");
+    }
+  } catch (err) {
+    console.warn("Could not invalidate Redis cache:", err.message);
+  }
+}
+
 async function main() {
-  console.log("=== MIBA <-> TADAROK FULL CATALOG SYNC STARTED ===");
-  console.log(`Connecting to Tadarok API: ${TADAROK_BASE_URL}`);
+  const startTime = new Date();
+  console.log(`=== TADAROK SYNC STARTED [${startTime.toISOString()}] ===`);
+
+  let lastSyncTime = null;
+  if (!isForceFull && existsSync(SYNC_STATE_FILE)) {
+    try {
+      const saved = readFileSync(SYNC_STATE_FILE, "utf-8").trim();
+      if (saved) {
+        lastSyncTime = new Date(saved);
+        // Step back 2 minutes as a safety buffer for any delayed transactions
+        lastSyncTime = new Date(lastSyncTime.getTime() - 120_000);
+      }
+    } catch {
+      lastSyncTime = null;
+    }
+  }
+
+  const isIncremental = Boolean(lastSyncTime && !isNaN(lastSyncTime.getTime()));
+  if (isIncremental) {
+    console.log(`Mode: INCREMENTAL (checking changes since ${lastSyncTime.toISOString()})`);
+  } else {
+    console.log("Mode: FULL CATALOG SCAN");
+  }
 
   if (!process.env.MONGO_URI) {
     throw new Error("MONGO_URI is not set in environment or .env file.");
   }
 
-  console.log("Connecting to MongoDB...");
   await mongoose.connect(process.env.MONGO_URI);
 
   const [{ default: Product }, { default: Category }, { buildNormalizedProductSearchText }] = await Promise.all([
@@ -177,17 +217,12 @@ async function main() {
 
   const categories = await Category.find({ isActive: true });
   const categoriesBySlug = new Map(categories.map((c) => [c.slug, c]));
-  console.log(`Loaded ${categories.length} active categories from MongoDB.`);
 
   if (shouldCleanDemo && !isDryRun) {
-    const deleted = await Product.deleteMany({ sku: { $in: DEMO_SKUS } });
-    if (deleted.deletedCount > 0) {
-      console.log(`Removed ${deleted.deletedCount} demo products.`);
-    }
+    await Product.deleteMany({ sku: { $in: DEMO_SKUS } });
   }
 
-  // Pre-load all existing products to track seen SKUs and Tadarok IDs
-  console.log("Pre-loading existing catalogue keys from MongoDB...");
+  // Pre-load keys to avoid duplicate SKU errors
   const existingDocs = await Product.find({}, { "attributes.tadarok_id": 1, sku: 1 }).lean();
   const existingByTadarokId = new Map();
   const usedSkus = new Set();
@@ -195,23 +230,25 @@ async function main() {
   for (const doc of existingDocs) {
     if (doc.sku) usedSkus.add(doc.sku);
     const tid = doc.attributes?.tadarok_id;
-    if (tid) existingByTadarokId.set(Number(tid), doc._id);
+    if (tid) existingByTadarokId.set(Number(tid), doc.sku);
   }
-  console.log(`Indexed ${existingDocs.length} existing products in database.`);
 
-  // Paginate through /api/v1/products?in_stock=true
-  console.log("Fetching in-stock products from Tadarok API (limit=500 per page)...");
   let cursor = null;
   let hasMore = true;
   let pageNum = 0;
   let totalProcessed = 0;
   let totalUpserted = 0;
-
   const BATCH_SIZE = 500;
 
   while (hasMore && totalProcessed < maxProducts) {
     pageNum++;
-    const params = { in_stock: "true", limit: BATCH_SIZE };
+    const params = { limit: BATCH_SIZE };
+    if (!isIncremental) {
+      params.in_stock = "true";
+    }
+    if (isIncremental) {
+      params.updated_since = lastSyncTime.toISOString();
+    }
     if (specificStoreNo) {
       params.store_no = specificStoreNo;
     }
@@ -221,7 +258,12 @@ async function main() {
 
     const res = await fetchTadarok("/products", params);
     const items = res.data || [];
-    if (items.length === 0) break;
+    if (items.length === 0) {
+      if (isIncremental && pageNum === 1) {
+        console.log("No new or updated products since last sync. All prices and stocks are current!");
+      }
+      break;
+    }
 
     const bulkOps = [];
 
@@ -233,21 +275,19 @@ async function main() {
       let code = (p.code || "").trim();
       const name = (p.name || `کالا ${code || productId}`).trim();
 
-      // Ensure unique SKU
-      let sku = code;
-      const existingId = existingByTadarokId.get(productId);
-
+      // Determine SKU consistently
+      let sku = existingByTadarokId.get(productId);
       if (!sku) {
-        sku = `TDK-${productId}`;
-      } else if (usedSkus.has(sku)) {
-        // Only append productId if this SKU belongs to a DIFFERENT product
-        sku = `${sku}-${productId}`;
+        sku = code || `TDK-${productId}`;
+        if (usedSkus.has(sku)) {
+          sku = `${sku}-${productId}`;
+        }
+        usedSkus.add(sku);
       }
-      usedSkus.add(sku);
 
       const category = detectCategory(name, p.base_store_name, categoriesBySlug);
 
-      // Price: Tadarok Rials -> whole Tomans
+      // Price conversion: Tadarok Rials -> whole Tomans
       const sellPriceRials = Number(p.sell_price || 0);
       const buyPriceRials = Number(p.buy_price || 0);
       let priceTomans = Math.round(sellPriceRials / 10);
@@ -320,19 +360,17 @@ async function main() {
         "attributes.sell_price_rials": sellPriceRials,
       };
 
-      const setOnInsert = {
-        createdAt: new Date(),
-        sizes: [],
-        colors: [],
-        variants: [],
-      };
-
       bulkOps.push({
         updateOne: {
           filter: { "attributes.tadarok_id": productId },
           update: {
             $set: setFields,
-            $setOnInsert: setOnInsert,
+            $setOnInsert: {
+              createdAt: new Date(),
+              sizes: [],
+              colors: [],
+              variants: [],
+            },
           },
           upsert: true,
         },
@@ -344,21 +382,25 @@ async function main() {
       totalUpserted += (bulkRes.upsertedCount || 0) + (bulkRes.modifiedCount || 0);
     }
 
-    const pct = res.meta?.total_count ? ((totalProcessed / res.meta.total_count) * 100).toFixed(1) : "?";
-    console.log(`Page ${pageNum}: processed ${totalProcessed} products (${bulkOps.length} in batch) [${pct}%]`);
+    console.log(`Page ${pageNum}: processed ${totalProcessed} products (${bulkOps.length} batch)`);
 
     hasMore = Boolean(res.page?.has_more && res.page?.next_cursor);
     cursor = res.page?.next_cursor || null;
   }
 
-  console.log("\n=== FULL SYNC COMPLETED ===");
-  console.log(`Total Products Processed: ${totalProcessed}`);
-  console.log(`Total Upserted / Updated: ${totalUpserted}`);
+  if (!isDryRun) {
+    // Save last sync timestamp
+    writeFileSync(SYNC_STATE_FILE, startTime.toISOString(), "utf-8");
+    if (totalUpserted > 0) {
+      await invalidateRedisCache();
+    }
+  }
 
+  console.log(`=== SYNC FINISHED: ${totalProcessed} processed, ${totalUpserted} updated ===\n`);
   await mongoose.disconnect();
 }
 
 main().catch((err) => {
-  console.error("FATAL FULL SYNC ERROR:", err);
+  console.error("FATAL SYNC ERROR:", err);
   process.exit(1);
 });
